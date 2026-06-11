@@ -99,7 +99,7 @@ public class AdoItemStore : IItemStore
 
     private async Task UpsertCacheAsync(AdoWorkItem wi, CancellationToken ct)
     {
-        if (ClosedStatuses.Contains(wi.State)) { await EvictAsync(wi.Id, ct); return; }
+        if (ClosedStatuses.Contains(wi.State, StringComparer.OrdinalIgnoreCase)) { await EvictAsync(wi.Id, ct); return; }
 
         var dto = ItemMapper.ToDto(wi);
         var row = await _cache.Items.FirstOrDefaultAsync(i => i.Id == wi.Id, ct);

@@ -32,7 +32,7 @@ export function initials(name: string): string {
 
 export function daysOpen(it: { received: string; status: string; updated: string | null }): number {
   const start = new Date(it.received).getTime()
-  const end = it.status === 'Closed' && it.updated ? new Date(it.updated).getTime() : Date.now()
+  const end = isClosed(it.status) && it.updated ? new Date(it.updated).getTime() : Date.now()
   return Math.max(0, Math.floor((end - start) / 86_400_000))
 }
 

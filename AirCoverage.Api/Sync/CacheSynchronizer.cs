@@ -69,7 +69,7 @@ public class CacheSynchronizer
     private async Task ApplyAsync(AdoWorkItem wi, CancellationToken ct)
     {
         var existing = await _cache.Items.FirstOrDefaultAsync(i => i.Id == wi.Id, ct);
-        if (AdoItemStore.ClosedStatuses.Contains(wi.State))
+        if (AdoItemStore.ClosedStatuses.Contains(wi.State, StringComparer.OrdinalIgnoreCase))
         {
             if (existing is not null) _cache.Items.Remove(existing);
             return;

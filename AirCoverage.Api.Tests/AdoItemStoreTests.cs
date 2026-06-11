@@ -89,6 +89,22 @@ public class AdoItemStoreTests
     }
 
     [Fact]
+    public async Task Update_to_lowercase_closed_state_evicts_from_cache()
+    {
+        var cache = NewCache();
+        cache.Items.Add(new CachedItem { Id = 12, Title = "Open", Status = "New", Tags = "AirCoverage" });
+        await cache.SaveChangesAsync();
+        var client = Substitute.For<IAzureDevOpsClient>();
+        client.UpdateAsync(12, Arg.Any<IReadOnlyList<JsonPatchOperation>>(), Arg.Any<CancellationToken>())
+            .Returns(Wi(12, "closed", "AirCoverage")); // lowercase — ADO non-canonical casing
+        var store = NewStore(cache, client);
+
+        await store.UpdateAsync(12, new ItemInput("Open", "d", "High", "Closed", "", "", "", ""), CancellationToken.None);
+
+        Assert.Equal(0, await cache.Items.CountAsync());
+    }
+
+    [Fact]
     public async Task Delete_detags_in_ado_and_evicts()
     {
         var cache = NewCache();
