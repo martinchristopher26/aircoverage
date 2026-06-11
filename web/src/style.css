@@ -133,6 +133,7 @@ a { color: var(--jf-green-link); text-decoration: none; }
 .page-head-right { margin-left: auto; display: flex; align-items: center; gap: 18px; color: var(--jf-muted); }
 .page-head-right .pico { cursor: pointer; display: flex; }
 .page-head-right .pico.help { color: var(--jf-green); }
+.sync-note { font-size: 11.5px; color: var(--jf-muted-2); }
 
 /* ---------- CONTENT CARD ---------- */
 .content { padding: 26px; max-width: 1480px; margin: 0 auto; }

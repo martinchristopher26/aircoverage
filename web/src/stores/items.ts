@@ -50,6 +50,11 @@ export const useItemsStore = defineStore('items', {
     sortKey: 'priority' as SortKey,
     sortDir: 1 as 1 | -1, // 1 = critical-first / oldest-first
 
+    // closed/resolved items loaded on demand
+    closedItems: [] as Item[],
+    closedLoaded: false,
+    lastSync: null as string | null,
+
     // modal state
     editing: null as ItemDraft | null,
     mode: 'edit' as 'edit' | 'add',
@@ -57,7 +62,9 @@ export const useItemsStore = defineStore('items', {
 
   getters: {
     filteredByTab(state): Item[] {
-      return state.items.filter((it) => {
+      const closedScope = ['Resolved', 'Closed', 'all'].includes(state.activeTab)
+      const source = closedScope ? [...state.items, ...state.closedItems] : state.items
+      return source.filter((it) => {
         if (state.activeTab === 'all') return true
         if (state.activeTab === 'open') return it.status !== 'Closed' && it.status !== 'Resolved'
         return it.status === state.activeTab
@@ -109,6 +116,28 @@ export const useItemsStore = defineStore('items', {
   },
 
   actions: {
+    async loadClosed() {
+      const data = await api.get<Record<string, unknown>[]>('/api/items?scope=closed')
+      this.closedItems = data.map(normalize)
+      this.closedLoaded = true
+    },
+
+    async loadSyncStatus() {
+      try {
+        const s = await api.get<{ lastSync: string | null }>('/api/sync/status')
+        this.lastSync = s.lastSync
+      } catch {
+        /* ignore */
+      }
+    },
+
+    async setTab(key: string) {
+      this.activeTab = key
+      if (['Resolved', 'Closed', 'all'].includes(key) && !this.closedLoaded) {
+        await this.loadClosed()
+      }
+    },
+
     async load() {
       this.loading = true
       this.loadError = ''

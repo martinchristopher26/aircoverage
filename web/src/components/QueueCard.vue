@@ -33,7 +33,7 @@ const items = useItemsStore()
           :key="t.key"
           class="tab"
           :class="{ active: items.activeTab === t.key }"
-          @click="items.activeTab = t.key"
+          @click="items.setTab(t.key)"
         >
           {{ t.label }} <span class="cnt">{{ items.tabCount(t.key) }}</span>
         </button>
