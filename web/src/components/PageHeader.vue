@@ -14,6 +14,7 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 const syncedAgo = computed(() => {
   if (!items.lastSync) return ''
   const secs = Math.max(0, Math.round((now.value - new Date(items.lastSync).getTime()) / 1000))
+  if (!Number.isFinite(secs)) return ''
   return secs < 60 ? `synced ${secs}s ago` : `synced ${Math.round(secs / 60)}m ago`
 })
 </script>

@@ -5,6 +5,12 @@ import type { Item, ItemDraft, Status, TicketType } from '../types'
 
 type SortKey = 'priority' | 'received'
 
+const CLOSED_SCOPE_TABS = ['Resolved', 'Closed', 'all']
+function dedupeById(list: Item[]): Item[] {
+  const seen = new Set<number>()
+  return list.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)))
+}
+
 /** Server fields are nullable; normalize to '' so the UI deals only in strings. */
 function normalize(raw: Record<string, unknown>): Item {
   return {
@@ -62,8 +68,8 @@ export const useItemsStore = defineStore('items', {
 
   getters: {
     filteredByTab(state): Item[] {
-      const closedScope = ['Resolved', 'Closed', 'all'].includes(state.activeTab)
-      const source = closedScope ? [...state.items, ...state.closedItems] : state.items
+      const closedScope = CLOSED_SCOPE_TABS.includes(state.activeTab)
+      const source = closedScope ? dedupeById([...state.items, ...state.closedItems]) : state.items
       return source.filter((it) => {
         if (state.activeTab === 'all') return true
         if (state.activeTab === 'open') return it.status !== 'Closed' && it.status !== 'Resolved'
@@ -108,9 +114,11 @@ export const useItemsStore = defineStore('items', {
 
     tabCount(): (key: string) => number {
       return (key: string) => {
-        if (key === 'all') return this.items.length
+        const closedScope = CLOSED_SCOPE_TABS.includes(key)
+        const source = closedScope ? dedupeById([...this.items, ...this.closedItems]) : this.items
+        if (key === 'all') return source.length
         if (key === 'open') return this.openCount
-        return this.items.filter((it) => it.status === key).length
+        return source.filter((it) => it.status === key).length
       }
     },
   },
@@ -133,12 +141,14 @@ export const useItemsStore = defineStore('items', {
 
     async setTab(key: string) {
       this.activeTab = key
-      if (['Resolved', 'Closed', 'all'].includes(key) && !this.closedLoaded) {
-        await this.loadClosed()
+      if (CLOSED_SCOPE_TABS.includes(key) && !this.closedLoaded) {
+        try { await this.loadClosed() } catch { this.loadError = 'Could not load closed items.' }
       }
     },
 
     async load() {
+      this.closedLoaded = false
+      this.closedItems = []
       this.loading = true
       this.loadError = ''
       try {
@@ -188,6 +198,17 @@ export const useItemsStore = defineStore('items', {
       if (this.editing) this.editing.status = s
     },
 
+    placeItem(item: Item) {
+      this.items = this.items.filter((i) => i.id !== item.id)
+      this.closedItems = this.closedItems.filter((i) => i.id !== item.id)
+      const isClosed = item.status === 'Closed' || item.status === 'Resolved'
+      if (isClosed) {
+        if (this.closedLoaded) this.closedItems.push(item)
+      } else {
+        this.items.push(item)
+      }
+    },
+
     async save() {
       if (!this.editing || !this.editing.title.trim()) return
       this.saving = true
@@ -195,15 +216,13 @@ export const useItemsStore = defineStore('items', {
       try {
         if (this.mode === 'add') {
           const created = await api.post<Record<string, unknown>>('/api/items', payload)
-          this.items.push(normalize(created))
+          this.placeItem(normalize(created))
         } else {
           const updated = await api.put<Record<string, unknown>>(
             `/api/items/${this.editing.id}`,
             payload,
           )
-          const normalized = normalize(updated)
-          const idx = this.items.findIndex((i) => i.id === normalized.id)
-          if (idx !== -1) this.items.splice(idx, 1, normalized)
+          this.placeItem(normalize(updated))
         }
         this.closeModal()
       } finally {
@@ -219,6 +238,7 @@ export const useItemsStore = defineStore('items', {
       }
       await api.del(`/api/items/${id}`)
       this.items = this.items.filter((i) => i.id !== id)
+      this.closedItems = this.closedItems.filter((i) => i.id !== id)
       this.closeModal()
     },
   },
