@@ -27,4 +27,17 @@ public class HtmlTextTests
     {
         Assert.Equal("a &amp; b<br>c", HtmlText.ToHtml("a & b\nc"));
     }
+
+    [Fact]
+    public void ToHtml_null_is_empty()
+    {
+        Assert.Equal("", HtmlText.ToHtml(null));
+    }
+
+    [Fact]
+    public void RoundTrip_plaintext_survives_html_then_back()
+    {
+        const string original = "line1\na & b\nline3";
+        Assert.Equal(original, HtmlText.ToPlainText(HtmlText.ToHtml(original)));
+    }
 }

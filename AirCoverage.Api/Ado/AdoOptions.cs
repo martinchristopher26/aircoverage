@@ -6,6 +6,7 @@ public class AdoOptions
 
     public string OrgUrl { get; set; } = "";          // https://dev.azure.com/yourorg
     public string Project { get; set; } = "";
+    // Provide via secret (env Ado__Pat / Docker secret / user-secrets) — never appsettings.json.
     public string Pat { get; set; } = "";
     public string Tag { get; set; } = "AirCoverage";
     public string? AreaPath { get; set; }
