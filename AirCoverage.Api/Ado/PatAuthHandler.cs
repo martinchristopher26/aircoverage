@@ -15,7 +15,8 @@ public class PatAuthHandler : DelegatingHandler
     public PatAuthHandler(IOptions<AdoOptions> options)
     {
         var pat = options.Value.Pat;
-        _header = Convert.ToBase64String(Encoding.ASCII.GetBytes(":" + pat));
+        // Fix 5: RFC 7617 mandates UTF-8 encoding for Basic auth credentials.
+        _header = Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + pat));
     }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)

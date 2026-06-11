@@ -20,9 +20,13 @@ public class AzureDevOpsClient : IAzureDevOpsClient
             _http.BaseAddress = new Uri(_opt.OrgUrl);
     }
 
+    // Fix 1: escape single quotes so tag/area-path values containing apostrophes
+    // can't produce malformed WIQL (e.g. "O'Brien" → "O''Brien").
+    private static string WiqlEscape(string s) => s.Replace("'", "''");
+
     private string TagFilter =>
-        $"[System.Tags] CONTAINS '{_opt.Tag}'" +
-        (string.IsNullOrWhiteSpace(_opt.AreaPath) ? "" : $" AND [System.AreaPath] UNDER '{_opt.AreaPath}'");
+        $"[System.Tags] CONTAINS '{WiqlEscape(_opt.Tag)}'" +
+        (string.IsNullOrWhiteSpace(_opt.AreaPath) ? "" : $" AND [System.AreaPath] UNDER '{WiqlEscape(_opt.AreaPath)}'");
 
     public Task<IReadOnlyList<int>> QueryOpenIdsAsync(CancellationToken ct) =>
         WiqlIdsAsync($"SELECT [System.Id] FROM WorkItems WHERE {TagFilter} " +
@@ -43,7 +47,8 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     {
         var resp = await _http.PostAsJsonAsync(
             $"/{_opt.Project}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
-        resp.EnsureSuccessStatusCode();
+        // Fix 4: surface ADO error bodies instead of bare EnsureSuccessStatusCode
+        await EnsureAdoSuccessAsync(resp, ct);
         var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
         var arr = json?["workItems"]?.AsArray();
         return arr is null ? Array.Empty<int>()
@@ -59,8 +64,15 @@ public class AzureDevOpsClient : IAzureDevOpsClient
             var fields = "System.Title,System.Description,System.State,System.Tags," +
                          "Microsoft.VSTS.Common.Priority,System.AssignedTo,System.CreatedDate,System.ChangedDate";
             var url = $"/_apis/wit/workitems?ids={string.Join(',', batch)}&fields={fields}&{ApiVersion}";
-            var json = await _http.GetFromJsonAsync<JsonObject>(url, ct);
-            foreach (var node in json?["value"]?.AsArray() ?? new JsonArray())
+            // Fix 4: switch from GetFromJsonAsync to GetAsync + EnsureAdoSuccessAsync so
+            // error bodies are surfaced; then read JSON manually.
+            var resp = await _http.GetAsync(url, ct);
+            await EnsureAdoSuccessAsync(resp, ct);
+            var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            // Fix 3: null-safe body check
+            if (json is null)
+                throw new InvalidOperationException($"ADO returned an empty body for {resp.RequestMessage?.RequestUri}");
+            foreach (var node in json["value"]?.AsArray() ?? new JsonArray())
                 result.Add(Flatten(node!.AsObject()));
         }
         return result;
@@ -70,9 +82,13 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     {
         var resp = await _http.GetAsync($"/_apis/wit/workitems/{id}?{ApiVersion}", ct);
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
-        resp.EnsureSuccessStatusCode();
+        // Fix 4: surface ADO error bodies for non-404 failures
+        await EnsureAdoSuccessAsync(resp, ct);
         var node = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
-        return Flatten(node!);
+        // Fix 3: null-safe body check
+        if (node is null)
+            throw new InvalidOperationException($"ADO returned an empty body for {resp.RequestMessage?.RequestUri}");
+        return Flatten(node);
     }
 
     public Task<AdoWorkItem> CreateAsync(IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct) =>
@@ -88,16 +104,34 @@ public class AzureDevOpsClient : IAzureDevOpsClient
             Content = new StringContent(JsonSerializer.Serialize(ops), Encoding.UTF8, "application/json-patch+json"),
         };
         var resp = await _http.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
+        // Fix 4: surface ADO error bodies instead of bare EnsureSuccessStatusCode
+        await EnsureAdoSuccessAsync(resp, ct);
         var node = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
-        return Flatten(node!);
+        // Fix 3: null-safe body check
+        if (node is null)
+            throw new InvalidOperationException($"ADO returned an empty body for {resp.RequestMessage?.RequestUri}");
+        return Flatten(node);
+    }
+
+    // Fix 4: helper that reads and includes the ADO error body in the exception message.
+    private static async Task EnsureAdoSuccessAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
+        if (resp.IsSuccessStatusCode) return;
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        var snippet = body.Length > 1024 ? body[..1024] : body;
+        throw new HttpRequestException(
+            $"ADO request to {resp.RequestMessage?.RequestUri} failed with {(int)resp.StatusCode} {resp.ReasonPhrase}: {snippet}");
     }
 
     private static AdoWorkItem Flatten(JsonObject node)
     {
-        var f = node["fields"]!.AsObject();
+        // Fix 3: informative exception when fields is absent
+        var fieldsNode = node["fields"]
+            ?? throw new InvalidOperationException($"ADO work item {node["id"]} has no 'fields'");
+        var f = fieldsNode.AsObject();
         string? S(string k) => f.TryGetPropertyValue(k, out var v) ? v?.ToString() : null;
-        int? I(string k) => f.TryGetPropertyValue(k, out var v) && v is not null ? (int)v! : null;
+        // Fix 2: robust integer parsing via string round-trip; tolerates any numeric serialization
+        int? I(string k) => int.TryParse(S(k), out var n) ? n : (int?)null;
         return new AdoWorkItem(
             Id: (int)node["id"]!,
             Title: S("System.Title") ?? "",
