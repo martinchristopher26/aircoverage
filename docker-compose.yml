@@ -4,8 +4,14 @@ services:
     container_name: aircoverage
     ports:
       - "8443:8443"
+    environment:
+      - Ado__OrgUrl=${ADO_ORG_URL}
+      - Ado__Project=${ADO_PROJECT}
+      - Ado__Pat=${ADO_PAT}
+      - Ado__Tag=AirCoverage
+      - Ado__WorkItemType=Bug
     volumes:
-      - aircoverage-data:/data   # persists the SQLite file + the dev cert across restarts
+      - aircoverage-data:/data   # persists the SQLite cache + the dev cert across restarts
     restart: unless-stopped
 
 volumes:

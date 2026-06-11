@@ -22,3 +22,7 @@ AirCoverage.Api/wwwroot/
 .vs/
 .idea/
 *.suo
+
+# Local secrets — copy .env.example → .env and fill in real values
+# .env.example IS tracked; .env must NOT be
+.env
