@@ -10,19 +10,24 @@ public static class ItemMapper
 
     private static readonly Dictionary<int, string> NumberToPriority =
         new() { [1] = "Critical", [2] = "High", [3] = "Medium", [4] = "Low" };
+    // Fix 2: case-insensitive priority map
     private static readonly Dictionary<string, int> PriorityToNumber =
-        new() { ["Critical"] = 1, ["High"] = 2, ["Medium"] = 3, ["Low"] = 4 };
+        new(StringComparer.OrdinalIgnoreCase) { ["Critical"] = 1, ["High"] = 2, ["Medium"] = 3, ["Low"] = 4 };
+    // Fix 3: case-insensitive status map
     private static readonly Dictionary<string, string> StateToStatus =
-        new() { ["New"] = "New", ["Active"] = "In Progress", ["Resolved"] = "Resolved", ["Closed"] = "Closed" };
+        new(StringComparer.OrdinalIgnoreCase) { ["New"] = "New", ["Active"] = "In Progress", ["Resolved"] = "Resolved", ["Closed"] = "Closed" };
 
-    public static List<string> ParseTags(string tags) =>
-        tags.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    // Fix 1: null-safe tag parsing
+    public static List<string> ParseTags(string? tags) =>
+        (tags ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     public static ItemDto ToDto(AdoWorkItem wi)
     {
         var tags = ParseTags(wi.Tags);
         var status = StateToStatus.GetValueOrDefault(wi.State, "New");
-        if (status == "In Progress" && tags.Contains(WaitingTag)) status = "Waiting";
+        // Fix 4: case-insensitive Waiting detection in ToDto
+        if (status == "In Progress" && tags.Any(t => t.Equals(WaitingTag, StringComparison.OrdinalIgnoreCase)))
+            status = "Waiting";
 
         var source = tags.FirstOrDefault(t => t.StartsWith(SourcePrefix, StringComparison.OrdinalIgnoreCase));
         var cw = tags.FirstOrDefault(t => t.StartsWith(CwPrefix, StringComparison.OrdinalIgnoreCase));
@@ -43,8 +48,9 @@ public static class ItemMapper
             Updated: wi.ChangedDate);
     }
 
+    // Fix 3: case-insensitive status map
     private static readonly Dictionary<string, string> StatusToState =
-        new() { ["New"] = "New", ["In Progress"] = "Active", ["Waiting"] = "Active",
+        new(StringComparer.OrdinalIgnoreCase) { ["New"] = "New", ["In Progress"] = "Active", ["Waiting"] = "Active",
                 ["Resolved"] = "Resolved", ["Closed"] = "Closed" };
 
     /// <summary>
@@ -58,21 +64,27 @@ public static class ItemMapper
         var status = input.Status;
         var state = StatusToState.GetValueOrDefault(status, "New");
 
+        // Fix 5: also remove any mis-cased copy of requiredTag from existing tags
         var tags = ParseTags(existingTags)
             .Where(t => !t.Equals(WaitingTag, StringComparison.OrdinalIgnoreCase)
                      && !t.StartsWith(SourcePrefix, StringComparison.OrdinalIgnoreCase)
-                     && !t.StartsWith(CwPrefix, StringComparison.OrdinalIgnoreCase))
+                     && !t.StartsWith(CwPrefix, StringComparison.OrdinalIgnoreCase)
+                     && !t.Equals(requiredTag, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (!tags.Any(t => t.Equals(requiredTag, StringComparison.OrdinalIgnoreCase)))
-            tags.Add(requiredTag);
-        if (status == "Waiting")
+        // Fix 5: unconditionally add the canonical requiredTag
+        tags.Add(requiredTag);
+        // Fix 3: case-insensitive Waiting check in ToPatch
+        if (string.Equals(input.Status, "Waiting", StringComparison.OrdinalIgnoreCase))
             tags.Add(WaitingTag);
         if (!string.IsNullOrWhiteSpace(input.RequestedBy))
             tags.Add(SourcePrefix + input.RequestedBy.Trim());
         if (string.Equals(input.TicketType, "ConnectWise", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(input.TicketRef))
             tags.Add(CwPrefix + input.TicketRef.Trim());
+
+        // Fix 6: de-dupe tags (canonical requiredTag casing was added first, Distinct preserves first occurrence)
+        tags = tags.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var ops = new List<JsonPatchOperation>
         {
