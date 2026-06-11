@@ -1,3 +1,4 @@
+using AirCoverage.Api.Abstractions;
 using AirCoverage.Api.Ado;
 
 namespace AirCoverage.Api.Tests;
@@ -41,5 +42,48 @@ public class ItemMapperTests
     {
         var dto = ItemMapper.ToDto(Wi("New", "AirCoverage", priority: null));
         Assert.Equal("Low", dto.Priority);
+    }
+
+    private static ItemInput Input(string status = "Waiting", string? source = "Support",
+        string? cw = "#1", string assignee = "Alex Reyes") =>
+        new("Title", "body\nline2", "High", status, source, assignee, cw is null ? "" : "ConnectWise", cw ?? "");
+
+    [Fact]
+    public void ToPatch_sets_state_active_and_waiting_tag_for_waiting()
+    {
+        var ops = ItemMapper.ToPatch(Input(status: "Waiting"), existingTags: "AirCoverage", "AirCoverage");
+        var tags = (string)ops.Single(o => o.path == "/fields/System.Tags").value!;
+        Assert.Equal("Active", ops.Single(o => o.path == "/fields/System.State").value);
+        Assert.Contains("Waiting", tags);
+        Assert.Equal(2, (int)ops.Single(o => o.path == "/fields/Microsoft.VSTS.Common.Priority").value!);
+    }
+
+    [Fact]
+    public void ToPatch_in_progress_removes_waiting_tag()
+    {
+        var ops = ItemMapper.ToPatch(Input(status: "In Progress"), existingTags: "AirCoverage; Waiting", "AirCoverage");
+        var tags = (string)ops.Single(o => o.path == "/fields/System.Tags").value!;
+        Assert.DoesNotContain("Waiting", tags);
+        Assert.Equal("Active", ops.Single(o => o.path == "/fields/System.State").value);
+    }
+
+    [Fact]
+    public void ToPatch_encodes_source_and_cw_tags_and_preserves_required_tag()
+    {
+        var ops = ItemMapper.ToPatch(Input(source: "Eng", cw: "#9"), existingTags: "AirCoverage; source:Old; cw:#1", "AirCoverage");
+        var tags = (string)ops.Single(o => o.path == "/fields/System.Tags").value!;
+        Assert.Contains("AirCoverage", tags);
+        Assert.Contains("source:Eng", tags);
+        Assert.Contains("cw:#9", tags);
+        Assert.DoesNotContain("source:Old", tags);
+        Assert.DoesNotContain("cw:#1", tags);
+    }
+
+    [Fact]
+    public void ToPatch_sets_assignedto_and_html_description()
+    {
+        var ops = ItemMapper.ToPatch(Input(), existingTags: "AirCoverage", "AirCoverage");
+        Assert.Equal("Alex Reyes", ops.Single(o => o.path == "/fields/System.AssignedTo").value);
+        Assert.Equal("body<br>line2", ops.Single(o => o.path == "/fields/System.Description").value);
     }
 }

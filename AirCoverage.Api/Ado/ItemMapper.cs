@@ -42,4 +42,47 @@ public static class ItemMapper
             Received: wi.CreatedDate,
             Updated: wi.ChangedDate);
     }
+
+    private static readonly Dictionary<string, string> StatusToState =
+        new() { ["New"] = "New", ["In Progress"] = "Active", ["Waiting"] = "Active",
+                ["Resolved"] = "Resolved", ["Closed"] = "Closed" };
+
+    /// <summary>
+    /// Builds a JSON-Patch document for create or update. <paramref name="existingTags"/>
+    /// is the work item's current System.Tags ("" for create); <paramref name="requiredTag"/>
+    /// is AdoOptions.Tag, always preserved. Managed tags (Waiting, source:, cw:) are
+    /// recomputed from the input; all other existing tags are kept.
+    /// </summary>
+    public static List<JsonPatchOperation> ToPatch(ItemInput input, string existingTags, string requiredTag)
+    {
+        var status = input.Status;
+        var state = StatusToState.GetValueOrDefault(status, "New");
+
+        var tags = ParseTags(existingTags)
+            .Where(t => !t.Equals(WaitingTag, StringComparison.OrdinalIgnoreCase)
+                     && !t.StartsWith(SourcePrefix, StringComparison.OrdinalIgnoreCase)
+                     && !t.StartsWith(CwPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!tags.Any(t => t.Equals(requiredTag, StringComparison.OrdinalIgnoreCase)))
+            tags.Add(requiredTag);
+        if (status == "Waiting")
+            tags.Add(WaitingTag);
+        if (!string.IsNullOrWhiteSpace(input.RequestedBy))
+            tags.Add(SourcePrefix + input.RequestedBy.Trim());
+        if (string.Equals(input.TicketType, "ConnectWise", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(input.TicketRef))
+            tags.Add(CwPrefix + input.TicketRef.Trim());
+
+        var ops = new List<JsonPatchOperation>
+        {
+            new("add", "/fields/System.Title", input.Title.Trim()),
+            new("add", "/fields/System.Description", HtmlText.ToHtml(input.Description)),
+            new("add", "/fields/System.State", state),
+            new("add", "/fields/Microsoft.VSTS.Common.Priority", PriorityToNumber.GetValueOrDefault(input.Priority, 4)),
+            new("add", "/fields/System.Tags", string.Join("; ", tags)),
+            new("add", "/fields/System.AssignedTo", input.Assignee ?? ""),
+        };
+        return ops;
+    }
 }
