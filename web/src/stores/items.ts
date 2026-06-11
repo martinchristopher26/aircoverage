@@ -18,6 +18,7 @@ function normalize(raw: Record<string, unknown>): Item {
     assignee: (raw.assignee as string) ?? '',
     ticketType: ((raw.ticketType as string) ?? '') as TicketType,
     ticketRef: (raw.ticketRef as string) ?? '',
+    url: (raw.url as string) ?? '',
     received: raw.received as string,
     updated: (raw.updated as string | null) ?? null,
   }

@@ -18,6 +18,7 @@ export interface Item {
   assignee: string
   ticketType: TicketType
   ticketRef: string
+  url: string
   received: string
   updated: string | null
 }
@@ -34,6 +35,7 @@ export interface ItemDraft {
   assignee: string
   ticketType: TicketType
   ticketRef: string
+  url?: string
   received: string
   updated: string | null
 }
