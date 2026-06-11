@@ -1,0 +1,24 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# SQLite (one portable file; created at runtime)
+*.db
+*.db-shm
+*.db-wal
+
+# Auto-generated self-signed dev certificate
+*.pfx
+
+# Node / Vite
+node_modules/
+web/dist/
+
+# Built SPA served by the API (produced by the Docker build or `npm run build`)
+AirCoverage.Api/wwwroot/
+
+# IDE
+.vs/
+.idea/
+*.suo

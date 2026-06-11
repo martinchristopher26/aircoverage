@@ -1,0 +1,12 @@
+services:
+  aircoverage:
+    build: .
+    container_name: aircoverage
+    ports:
+      - "8443:8443"
+    volumes:
+      - aircoverage-data:/data   # persists the SQLite file + the dev cert across restarts
+    restart: unless-stopped
+
+volumes:
+  aircoverage-data:

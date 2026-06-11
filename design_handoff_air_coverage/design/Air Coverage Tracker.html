@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Air Coverage Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --jf-green:#1f9d58;
+    --jf-green-dk:#178a4b;
+    --jf-green-link:#1b8a4c;
+    --jf-red:#e1402f;
+    --jf-page:#f4f5f6;
+    --jf-card:#ffffff;
+    --jf-border:#e7e9ec;
+    --jf-border-2:#eef0f2;
+    --jf-text:#303133;
+    --jf-muted:#8a9099;
+    --jf-muted-2:#aab0b7;
+    --prio-critical:#d93535;
+    --prio-high:#e8833a;
+    --prio-medium:#3070c9;
+    --prio-low:#7a8694;
+    --st-new:#3b73c4;
+    --st-progress:#1f9d58;
+    --st-waiting:#d8a72b;
+    --st-resolved:#2e8b57;
+    --st-closed:#9aa0a7;
+    --shadow-card:0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
+    --shadow-pop:0 12px 40px rgba(16,24,40,.18), 0 2px 8px rgba(16,24,40,.08);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:var(--jf-text);
+    background:var(--jf-page);
+    font-size:14px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  [v-cloak]{display:none;}
+  button{font-family:inherit;cursor:pointer;}
+  a{color:var(--jf-green-link);text-decoration:none;}
+
+  /* ---------- LOGIN ---------- */
+  .login-wrap{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(31,157,88,.12), transparent 60%),
+      var(--jf-page);
+    padding:24px;
+  }
+  .login-card{
+    width:100%;max-width:380px;background:#fff;border-radius:10px;
+    box-shadow:var(--shadow-pop);padding:38px 34px 30px;text-align:center;
+  }
+  .login-logo{
+    width:60px;height:60px;border-radius:12px;background:var(--jf-green);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:24px;letter-spacing:1px;margin:0 auto 18px;
+    box-shadow:0 6px 16px rgba(31,157,88,.35);
+  }
+  .login-card h1{font-size:20px;margin:0 0 4px;font-weight:700;}
+  .login-card .sub{color:var(--jf-muted);font-size:13px;margin-bottom:24px;}
+  .field{text-align:left;margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:#5c636b;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px;}
+  .field input{
+    width:100%;padding:10px 12px;border:1px solid var(--jf-border);border-radius:7px;
+    font-size:14px;font-family:inherit;color:var(--jf-text);background:#fbfbfc;transition:border-color .15s, box-shadow .15s;
+  }
+  .field input:focus{outline:none;border-color:var(--jf-green);box-shadow:0 0 0 3px rgba(31,157,88,.15);background:#fff;}
+  .btn-primary{
+    width:100%;background:var(--jf-green);color:#fff;border:none;border-radius:7px;
+    padding:11px;font-size:14px;font-weight:600;letter-spacing:.3px;margin-top:6px;transition:background .15s;
+  }
+  .btn-primary:hover{background:var(--jf-green-dk);}
+  .login-err{color:var(--jf-red);font-size:12.5px;margin:2px 0 8px;min-height:16px;text-align:left;}
+  .login-hint{margin-top:20px;font-size:12px;color:var(--jf-muted-2);border-top:1px solid var(--jf-border-2);padding-top:14px;}
+  .login-hint code{background:#f1f3f4;padding:1px 6px;border-radius:4px;color:#5c636b;font-size:11.5px;}
+
+  /* ---------- TOP NAV ---------- */
+  .topbar{
+    height:58px;background:var(--jf-green);display:flex;align-items:center;
+    padding:0 22px;color:#fff;position:sticky;top:0;z-index:30;
+  }
+  .jf-mark{
+    font-weight:700;font-size:22px;letter-spacing:1px;color:#fff;margin-right:26px;
+    display:flex;align-items:center;gap:0;user-select:none;
+  }
+  .jf-mark span{font-style:italic;}
+  .nav{display:flex;align-items:center;gap:4px;}
+  .nav a{
+    color:rgba(255,255,255,.92);font-size:13px;font-weight:600;letter-spacing:.6px;
+    text-transform:uppercase;padding:7px 15px;border-radius:18px;border:1.5px solid transparent;
+    cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s;
+  }
+  .nav a:hover{background:rgba(255,255,255,.12);}
+  .nav a.active{border-color:rgba(255,255,255,.9);background:rgba(255,255,255,.08);}
+  .nav .caret{font-size:9px;opacity:.85;margin-left:5px;}
+  .topbar-right{margin-left:auto;display:flex;align-items:center;gap:18px;}
+  .ico-btn{position:relative;color:#fff;cursor:pointer;display:flex;opacity:.95;}
+  .ico-btn:hover{opacity:1;}
+  .ico-btn .badge{
+    position:absolute;top:-7px;right:-9px;background:var(--jf-red);color:#fff;
+    font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;padding:0 3px;border:1.5px solid var(--jf-green);
+  }
+  .avatar{
+    width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.2);
+    border:1.5px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;
+    color:#fff;cursor:pointer;position:relative;
+  }
+  .avatar-menu{
+    position:absolute;top:42px;right:0;background:#fff;border-radius:8px;box-shadow:var(--shadow-pop);
+    min-width:180px;padding:6px;color:var(--jf-text);z-index:40;
+  }
+  .avatar-menu .who{padding:9px 12px 8px;border-bottom:1px solid var(--jf-border-2);}
+  .avatar-menu .who b{display:block;font-size:13px;}
+  .avatar-menu .who small{color:var(--jf-muted);font-size:11.5px;}
+  .avatar-menu button{
+    width:100%;text-align:left;background:none;border:none;padding:9px 12px;border-radius:6px;
+    font-size:13px;color:var(--jf-text);display:flex;align-items:center;gap:9px;
+  }
+  .avatar-menu button:hover{background:#f3f5f6;}
+
+  /* ---------- PAGE HEADER ---------- */
+  .page-head{
+    background:#fff;border-bottom:1px solid var(--jf-border);
+    padding:16px 28px;display:flex;align-items:center;gap:18px;
+  }
+  .page-head h2{font-size:21px;font-weight:700;margin:0;color:#2c3136;}
+  .add-new{
+    display:flex;align-items:center;gap:7px;color:var(--jf-green-link);font-weight:700;
+    font-size:13px;letter-spacing:.5px;text-transform:uppercase;background:none;border:none;
+  }
+  .add-new:hover{color:var(--jf-green-dk);}
+  .add-new .plus{
+    width:22px;height:22px;border-radius:50%;border:2px solid var(--jf-green-link);
+    display:flex;align-items:center;justify-content:center;font-size:16px;line-height:0;font-weight:400;
+  }
+  .page-head-right{margin-left:auto;display:flex;align-items:center;gap:18px;color:var(--jf-muted);}
+  .page-head-right .pico{cursor:pointer;display:flex;}
+  .page-head-right .pico.help{color:var(--jf-green);}
+
+  /* ---------- CONTENT CARD ---------- */
+  .content{padding:26px;max-width:1480px;margin:0 auto;}
+  .card{background:var(--jf-card);border-radius:10px;box-shadow:var(--shadow-card);border:1px solid var(--jf-border-2);overflow:hidden;}
+  .filter-bar{display:flex;align-items:center;gap:12px;padding:16px 22px 12px;border-bottom:1px solid var(--jf-border-2);}
+  .filter-input{display:flex;align-items:center;gap:10px;flex:1;border-bottom:1.5px solid var(--jf-border);padding-bottom:7px;}
+  .filter-input svg{color:var(--jf-muted);flex-shrink:0;}
+  .filter-input input{border:none;outline:none;font-size:14.5px;font-family:inherit;color:var(--jf-text);width:100%;background:none;}
+  .filter-input input::placeholder{color:var(--jf-muted-2);}
+  .kebab{color:var(--jf-muted);cursor:pointer;display:flex;padding:2px;border-radius:5px;}
+  .kebab:hover{background:#f3f5f6;}
+
+  /* tabs */
+  .tabs{display:flex;gap:2px;padding:10px 18px 0;border-bottom:1px solid var(--jf-border-2);flex-wrap:wrap;}
+  .tab{
+    background:none;border:none;padding:8px 14px 11px;font-size:13px;font-weight:600;color:var(--jf-muted);
+    border-bottom:2.5px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px;
+  }
+  .tab:hover{color:#5c636b;}
+  .tab.active{color:var(--jf-green-link);border-bottom-color:var(--jf-green);}
+  .tab .cnt{
+    background:#eef0f2;color:#6b7178;font-size:11px;font-weight:700;border-radius:9px;padding:1px 7px;min-width:18px;text-align:center;
+  }
+  .tab.active .cnt{background:rgba(31,157,88,.14);color:var(--jf-green-link);}
+
+  /* ---------- TABLE ---------- */
+  table{width:100%;border-collapse:collapse;}
+  thead th{
+    text-align:left;font-size:11.5px;font-weight:700;color:#6b7178;letter-spacing:.5px;
+    padding:13px 14px;border-bottom:1px solid var(--jf-border);white-space:nowrap;user-select:none;
+  }
+  thead th.sortable{cursor:pointer;}
+  thead th.sortable:hover{color:var(--jf-green-link);}
+  thead th .arrow{font-size:10px;color:var(--jf-green-link);margin-left:3px;}
+  tbody td{padding:13px 14px;border-bottom:1px solid var(--jf-border-2);vertical-align:middle;font-size:13.5px;}
+  tbody tr{transition:background .12s;}
+  tbody tr:hover{background:#f8fafb;}
+  tbody tr:last-child td{border-bottom:none;}
+  .id-link{color:var(--jf-green-link);font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
+  .id-link:hover{color:var(--jf-green-dk);}
+  .row-title{color:#2c3136;max-width:320px;}
+  .row-title .desc-1{color:var(--jf-muted);font-size:12px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
+
+  /* priority badge */
+  .prio{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;white-space:nowrap;}
+  .prio .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .prio.Critical{color:var(--prio-critical);} .prio.Critical .dot{background:var(--prio-critical);}
+  .prio.High{color:var(--prio-high);} .prio.High .dot{background:var(--prio-high);}
+  .prio.Medium{color:#3070c9;} .prio.Medium .dot{background:var(--prio-medium);}
+  .prio.Low{color:var(--prio-low);} .prio.Low .dot{background:var(--prio-low);}
+
+  /* status dot+label */
+  .status{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-size:13px;color:#404750;}
+  .status .sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .status.New .sdot{background:var(--st-new);}
+  .status.InProgress .sdot{background:var(--st-progress);}
+  .status.Waiting .sdot{background:var(--st-waiting);}
+  .status.Resolved .sdot{background:var(--st-resolved);}
+  .status.Closed .sdot{background:var(--st-closed);}
+  .status.Closed{color:var(--jf-muted);}
+
+  /* assignee pill (matches Departments/Users) */
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+    padding:4px 11px;border-radius:14px;white-space:nowrap;
+  }
+  .pill.assigned{background:rgba(31,157,88,.1);color:var(--jf-green-link);border:1px solid rgba(31,157,88,.28);}
+  .pill.unassigned{background:#fff;color:var(--jf-muted);border:1px solid var(--jf-border);}
+  .pill .av{width:16px;height:16px;border-radius:50%;background:var(--jf-green);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+
+  .ticket-link{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--jf-green-link);font-weight:600;}
+  .ticket-link.none{color:var(--jf-muted-2);font-weight:400;}
+  .ticket-link svg{flex-shrink:0;}
+
+  .days{font-variant-numeric:tabular-nums;font-weight:600;color:#404750;}
+  .days small{color:var(--jf-muted);font-weight:400;}
+  .age-warn{color:var(--jf-red);}
+
+  .empty{padding:54px 20px;text-align:center;color:var(--jf-muted);}
+  .empty svg{color:#cdd2d7;margin-bottom:10px;}
+  .empty p{margin:0;font-size:14px;}
+
+  /* ---------- MODAL ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(28,33,38,.46);display:flex;align-items:flex-start;justify-content:center;z-index:50;padding:48px 20px;overflow-y:auto;}
+  .modal{background:#fff;border-radius:12px;box-shadow:var(--shadow-pop);width:100%;max-width:620px;overflow:hidden;animation:pop .16s ease-out;}
+  @keyframes pop{from{transform:translateY(8px) scale(.985);opacity:0;}to{transform:none;opacity:1;}}
+  .modal-head{padding:20px 24px;border-bottom:1px solid var(--jf-border-2);display:flex;align-items:flex-start;gap:14px;}
+  .modal-head .mh-id{font-size:12px;font-weight:700;color:var(--jf-green-link);letter-spacing:.5px;margin-bottom:3px;}
+  .modal-head h3{margin:0;font-size:18px;font-weight:700;color:#2c3136;line-height:1.3;}
+  .modal-head h3 input{font-size:18px;font-weight:700;font-family:inherit;border:1px solid var(--jf-border);border-radius:6px;padding:5px 9px;width:100%;color:#2c3136;}
+  .modal-x{margin-left:auto;background:none;border:none;color:var(--jf-muted);font-size:22px;line-height:1;padding:2px 6px;border-radius:6px;flex-shrink:0;}
+  .modal-x:hover{background:#f3f5f6;color:#5c636b;}
+  .modal-body{padding:20px 24px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;}
+  .mfield{margin-bottom:4px;}
+  .mfield.full{grid-column:1 / -1;}
+  .mfield label{display:block;font-size:11px;font-weight:700;color:#6b7178;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+  .mfield input[type=text], .mfield select, .mfield textarea{
+    width:100%;padding:9px 11px;border:1px solid var(--jf-border);border-radius:7px;font-size:13.5px;
+    font-family:inherit;color:var(--jf-text);background:#fff;transition:border-color .15s,box-shadow .15s;
+  }
+  .mfield textarea{resize:vertical;min-height:84px;line-height:1.5;}
+  .mfield input:focus,.mfield select:focus,.mfield textarea:focus{outline:none;border-color:var(--jf-green);box-shadow:0 0 0 3px rgba(31,157,88,.13);}
+  .ticket-split{display:grid;grid-template-columns:130px 1fr;gap:10px;}
+  .meta-read{font-size:13px;color:#404750;}
+  .meta-read .muted{color:var(--jf-muted);}
+
+  .status-flow{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px;}
+  .flow-btn{
+    border:1px solid var(--jf-border);background:#fff;border-radius:7px;padding:7px 12px;font-size:12.5px;font-weight:600;
+    color:#5c636b;display:flex;align-items:center;gap:7px;transition:all .12s;
+  }
+  .flow-btn:hover{border-color:var(--jf-green);color:var(--jf-green-link);background:rgba(31,157,88,.05);}
+  .flow-btn .sdot{width:8px;height:8px;border-radius:50%;}
+  .flow-btn.cur{border-color:var(--jf-green);background:rgba(31,157,88,.1);color:var(--jf-green-link);cursor:default;}
+  .flow-label{font-size:11px;font-weight:700;color:#6b7178;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+
+  .modal-foot{padding:16px 24px;border-top:1px solid var(--jf-border-2);display:flex;align-items:center;gap:10px;background:#fbfbfc;}
+  .btn{padding:9px 18px;border-radius:7px;font-size:13.5px;font-weight:600;border:1px solid var(--jf-border);background:#fff;color:#5c636b;}
+  .btn:hover{background:#f3f5f6;}
+  .btn.green{background:var(--jf-green);color:#fff;border-color:var(--jf-green);}
+  .btn.green:hover{background:var(--jf-green-dk);}
+  .btn.danger-ghost{color:var(--jf-red);border-color:transparent;margin-right:auto;padding-left:0;}
+  .btn.danger-ghost:hover{background:rgba(225,64,47,.07);}
+  .updated-note{font-size:11.5px;color:var(--jf-muted-2);margin-left:auto;}
+
+  @media (max-width:720px){
+    .grid2{grid-template-columns:1fr;}
+    .nav{display:none;}
+    .content{padding:14px;}
+    .table-scroll{overflow-x:auto;}
+  }
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- ============ LOGIN ============ -->
+  <div class="login-wrap" v-if="!authed">
+    <form class="login-card" @submit.prevent="login">
+      <div class="login-logo"><span style="font-style:italic">J</span>F</div>
+      <h1>Air Coverage</h1>
+      <div class="sub">Dev support queue &middot; sign in to continue</div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" v-model.trim="loginForm.user" autocomplete="username" placeholder="devteam" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" v-model="loginForm.pass" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <div class="login-err">{{ loginError }}</div>
+      <button type="submit" class="btn-primary">Sign in</button>
+      <div class="login-hint">
+        Shared team login &middot; user <code>{{ SHARED_USER }}</code> &middot; pass <code>{{ SHARED_PASS }}</code>
+      </div>
+    </form>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <template v-if="authed">
+    <!-- top nav -->
+    <header class="topbar">
+      <div class="jf-mark"><span>J</span>F</div>
+      <nav class="nav">
+        <a class="active">Air Coverage</a>
+        <a>My Items</a>
+      </nav>
+      <div class="topbar-right">
+        <div class="avatar" @click.stop="avatarOpen=!avatarOpen" title="Account">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          <div class="avatar-menu" v-if="avatarOpen" @click.stop>
+            <div class="who"><b>Dev Team</b><small>{{ SHARED_USER }}</small></div>
+            <button @click="signOut">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- page header -->
+    <div class="page-head">
+      <h2>Air Coverage</h2>
+      <button class="add-new" @click="openAdd">
+        <span class="plus">+</span> Add New
+      </button>
+      <div class="page-head-right">
+        <span class="pico" title="Export">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>
+        </span>
+        <span class="pico help" title="Help">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 0 1 5.4 1c0 1.8-2.6 2-2.6 4"/><line x1="12" y1="17.5" x2="12" y2="17.5"/></svg>
+        </span>
+      </div>
+    </div>
+
+    <!-- content -->
+    <main class="content">
+      <div class="card">
+        <!-- filter -->
+        <div class="filter-bar">
+          <div class="filter-input">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/></svg>
+            <input type="text" v-model="search" placeholder="Filter by title, ID, source, or assignee…" />
+          </div>
+          <span class="kebab" title="More">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+          </span>
+        </div>
+
+        <!-- tabs -->
+        <div class="tabs">
+          <button v-for="t in tabs" :key="t.key" class="tab" :class="{active: activeTab===t.key}" @click="activeTab=t.key">
+            {{ t.label }} <span class="cnt">{{ tabCount(t.key) }}</span>
+          </button>
+        </div>
+
+        <!-- table -->
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" style="width:130px" @click="setSort('priority')">Priority<span class="arrow" v-if="sortKey==='priority'">{{ sortDir>0?'↑':'↓' }}</span></th>
+                <th style="width:120px">Item #</th>
+                <th>Title / Summary</th>
+                <th style="width:150px">Status</th>
+                <th style="width:170px">Assigned</th>
+                <th style="width:140px">Source</th>
+                <th style="width:120px">Ticket</th>
+                <th class="sortable" style="width:120px" @click="setSort('received')">Days Open<span class="arrow" v-if="sortKey==='received'">{{ sortDir>0?'↑':'↓' }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="it in visibleItems" :key="it.id" @click="openDetail(it)" style="cursor:pointer">
+                <td><span class="prio" :class="it.priority"><span class="dot"></span>{{ it.priority }}</span></td>
+                <td><span class="id-link" @click.stop="openDetail(it)">{{ it.id }}</span></td>
+                <td>
+                  <div class="row-title">
+                    {{ it.title }}
+                    <div class="desc-1" v-if="it.description">{{ it.description }}</div>
+                  </div>
+                </td>
+                <td><span class="status" :class="statusClass(it.status)"><span class="sdot"></span>{{ it.status }}</span></td>
+                <td>
+                  <span v-if="it.assignee" class="pill assigned"><span class="av">{{ initials(it.assignee) }}</span>{{ it.assignee }}</span>
+                  <span v-else class="pill unassigned">Unassigned</span>
+                </td>
+                <td><span class="meta-read">{{ it.requestedBy || '—' }}</span></td>
+                <td>
+                  <a v-if="it.ticketRef" class="ticket-link" @click.stop href="#" @click.prevent>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+                    {{ it.ticketType }} {{ it.ticketRef }}
+                  </a>
+                  <span v-else class="ticket-link none">—</span>
+                </td>
+                <td>
+                  <span class="days" :class="{'age-warn': daysOpen(it)>=14 && !isClosed(it.status)}">
+                    {{ daysOpen(it) }} <small>{{ daysOpen(it)===1?'day':'days' }}</small>
+                  </span>
+                </td>
+              </tr>
+              <tr v-if="visibleItems.length===0">
+                <td colspan="8">
+                  <div class="empty">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <p>Nothing here. {{ search ? 'No items match your filter.' : 'The queue is clear.' }}</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============ DETAIL / ADD MODAL ============ -->
+    <div class="overlay" v-if="editing" @click.self="closeModal">
+      <div class="modal">
+        <div class="modal-head">
+          <div style="flex:1">
+            <div class="mh-id" v-if="mode==='edit'">{{ editing.id }}</div>
+            <div class="mh-id" v-else>NEW ITEM</div>
+            <h3 v-if="mode==='edit'">{{ editing.title }}</h3>
+            <h3 v-else><input type="text" v-model="editing.title" placeholder="Short summary of the air coverage item" /></h3>
+          </div>
+          <button class="modal-x" @click="closeModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- status flow (edit mode) -->
+          <div class="mfield full" v-if="mode==='edit'" style="margin-bottom:20px">
+            <div class="flow-label">Status — click to advance</div>
+            <div class="status-flow">
+              <button v-for="s in statuses" :key="s" class="flow-btn" :class="{cur: editing.status===s}" @click="setStatus(s)">
+                <span class="sdot" :style="{background: statusColor(s)}"></span>{{ s }}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="mfield" v-if="mode==='add'">
+              <label>Status</label>
+              <select v-model="editing.status">
+                <option v-for="s in statuses" :key="s">{{ s }}</option>
+              </select>
+            </div>
+            <div class="mfield">
+              <label>Priority</label>
+              <select v-model="editing.priority">
+                <option v-for="p in priorities" :key="p">{{ p }}</option>
+              </select>
+            </div>
+            <div class="mfield">
+              <label>Assigned developer</label>
+              <select v-model="editing.assignee">
+                <option value="">Unassigned</option>
+                <option v-for="d in devs" :key="d">{{ d }}</option>
+              </select>
+            </div>
+            <div class="mfield">
+              <label>Requested by / source</label>
+              <input type="text" v-model.trim="editing.requestedBy" placeholder="e.g. Support, Customer, On-call" />
+            </div>
+            <div class="mfield">
+              <label>Linked ticket</label>
+              <div class="ticket-split">
+                <select v-model="editing.ticketType">
+                  <option value="">None</option>
+                  <option>ADO</option>
+                  <option>ConnectWise</option>
+                </select>
+                <input type="text" v-model.trim="editing.ticketRef" :disabled="!editing.ticketType" placeholder="#12345" />
+              </div>
+            </div>
+            <div class="mfield full">
+              <label>Description / details</label>
+              <textarea v-model="editing.description" placeholder="What's going on, repro steps, impact, who's affected…"></textarea>
+            </div>
+          </div>
+
+          <div class="grid2" v-if="mode==='edit'" style="margin-top:16px">
+            <div class="mfield">
+              <label>Received</label>
+              <div class="meta-read">{{ fmtDate(editing.received) }} <span class="muted">· {{ daysOpen(editing) }} days open</span></div>
+            </div>
+            <div class="mfield">
+              <label>Last updated</label>
+              <div class="meta-read">{{ editing.updated ? fmtDateTime(editing.updated) : '—' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button v-if="mode==='edit'" class="btn danger-ghost" @click="removeItem">Delete</button>
+          <span class="updated-note" v-if="mode==='edit'">Item {{ editing.id }}</span>
+          <button class="btn" @click="closeModal">Cancel</button>
+          <button class="btn green" @click="save" :disabled="!editing.title">{{ mode==='add' ? 'Create item' : 'Save changes' }}</button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<script src="https://unpkg.com/vue@3.4.21/dist/vue.global.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

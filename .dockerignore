@@ -1,0 +1,22 @@
+# Build artifacts — rebuilt inside the image
+**/bin
+**/obj
+**/node_modules
+**/dist
+AirCoverage.Api/wwwroot
+
+# Local SQLite databases
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# Local dev certificate (generated at runtime, never baked into the image)
+**/*.pfx
+
+# Repo / IDE / handoff material not needed in the build
+.git
+.gitignore
+.vs
+.idea
+design_handoff_air_coverage
+README.md
