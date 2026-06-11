@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AirCoverage.Api.Tests/AirCoverage.Api.Tests.csproj" />
+  <Project Path="AirCoverage.Api/AirCoverage.Api.csproj" />
+</Solution>
