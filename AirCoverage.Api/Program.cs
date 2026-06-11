@@ -1,6 +1,10 @@
+using AirCoverage.Api.Abstractions;
+using AirCoverage.Api.Ado;
 using AirCoverage.Api.Data;
 using AirCoverage.Api.Endpoints;
 using AirCoverage.Api.Security;
+using AirCoverage.Api.Stores;
+using AirCoverage.Api.Sync;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,7 +39,17 @@ builder.WebHost.ConfigureKestrel((context, options) =>
 //     with ConnectionStrings__Default=Data Source=/data/aircoverage.db). ---
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Data Source=aircoverage.db";
-builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContext<CacheDbContext>(options => options.UseSqlite(connectionString));
+
+// ADO options + authenticated, resilient HTTP client + store + background sync.
+builder.Services.Configure<AdoOptions>(builder.Configuration.GetSection(AdoOptions.Section));
+builder.Services.AddTransient<PatAuthHandler>();
+builder.Services.AddHttpClient<IAzureDevOpsClient, AzureDevOpsClient>()
+    .AddHttpMessageHandler<PatAuthHandler>()
+    .AddStandardResilienceHandler();   // Polly: retries (incl. 429), timeout, circuit breaker
+builder.Services.AddScoped<IItemStore, AdoItemStore>();
+builder.Services.AddScoped<CacheSynchronizer>();
+builder.Services.AddHostedService<SyncService>();
 
 // --- Auth v1: shared credential -> HttpOnly cookie. API returns 401 instead of
 //     redirecting to a login page so the SPA can react. ---
@@ -64,12 +78,12 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// --- Apply migrations + seed sample data on startup. ---
+// --- Apply cache-schema migrations on startup. ADO is the source of truth; the
+//     cache is populated by the SyncService's initial reconcile (no seeding). ---
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<CacheDbContext>();
     db.Database.Migrate();
-    DbSeeder.Seed(db);
 }
 
 // Serve the built Vue SPA (wwwroot) as static files; these are public so the
@@ -82,6 +96,7 @@ app.UseAuthorization();
 
 app.MapAuthApi();
 app.MapItemsApi();
+app.MapSyncApi();
 
 // SPA fallback: any non-API, non-file route returns index.html for client routing.
 app.MapFallbackToFile("index.html");
