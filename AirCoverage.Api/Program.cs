@@ -39,7 +39,8 @@ builder.WebHost.ConfigureKestrel((context, options) =>
 //     with ConnectionStrings__Default=Data Source=/data/aircoverage.db). ---
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Data Source=aircoverage.db";
-builder.Services.AddDbContext<CacheDbContext>(options => options.UseSqlite(connectionString));
+builder.Services.AddDbContext<CacheDbContext>(options =>
+    options.UseSqlite(connectionString).AddInterceptors(new SqlitePragmaInterceptor()));
 
 // ADO options + authenticated, resilient HTTP client + store + background sync.
 builder.Services.Configure<AdoOptions>(builder.Configuration.GetSection(AdoOptions.Section));

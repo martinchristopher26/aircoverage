@@ -8,7 +8,12 @@ namespace AirCoverage.Api.Stores;
 
 public class AdoItemStore : IItemStore
 {
-    private static readonly string[] ClosedStatuses = { "Closed", "Resolved" };
+    /// <summary>ADO states that are NOT cached (closed/resolved). Shared so the store
+    /// and the background sync can't drift on what counts as "closed".</summary>
+    public static readonly string[] ClosedStatuses = { "Closed", "Resolved" };
+
+    private static readonly Dictionary<string, int> PriorityRank =
+        new(StringComparer.OrdinalIgnoreCase) { ["Critical"] = 0, ["High"] = 1, ["Medium"] = 2, ["Low"] = 3 };
 
     private readonly CacheDbContext _cache;
     private readonly IAzureDevOpsClient _ado;
@@ -26,7 +31,14 @@ public class AdoItemStore : IItemStore
         if (scope == ItemScope.Open)
         {
             var rows = await _cache.Items.AsNoTracking().ToListAsync(ct);
-            return rows.Select(ToDto).ToList();
+            // Canonical order (parity with the previous endpoint): most urgent first —
+            // priority rank (Critical=0..Low=3), then oldest Received first. Sorted in
+            // memory since the open set is small.
+            return rows
+                .Select(ToDto)
+                .OrderBy(d => PriorityRank.GetValueOrDefault(d.Priority, int.MaxValue))
+                .ThenBy(d => d.Received)
+                .ToList();
         }
 
         // Closed/Resolved are not cached: bounded on-demand query.

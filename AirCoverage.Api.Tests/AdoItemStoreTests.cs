@@ -73,6 +73,22 @@ public class AdoItemStoreTests
     }
 
     [Fact]
+    public async Task Update_to_resolved_evicts_from_cache()
+    {
+        var cache = NewCache();
+        cache.Items.Add(new CachedItem { Id = 9, Title = "Open", Status = "New", Tags = "AirCoverage" });
+        await cache.SaveChangesAsync();
+        var client = Substitute.For<IAzureDevOpsClient>();
+        client.UpdateAsync(9, Arg.Any<IReadOnlyList<JsonPatchOperation>>(), Arg.Any<CancellationToken>())
+            .Returns(Wi(9, "Resolved", "AirCoverage"));
+        var store = NewStore(cache, client);
+
+        await store.UpdateAsync(9, new ItemInput("Open", "d", "High", "Resolved", "", "", "", ""), CancellationToken.None);
+
+        Assert.Equal(0, await cache.Items.CountAsync());
+    }
+
+    [Fact]
     public async Task Delete_detags_in_ado_and_evicts()
     {
         var cache = NewCache();

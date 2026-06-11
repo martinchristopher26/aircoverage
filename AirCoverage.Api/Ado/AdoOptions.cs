@@ -14,4 +14,7 @@ public class AdoOptions
     public int PollSeconds { get; set; } = 60;
     public int ReconcileSeconds { get; set; } = 300;
     public int ClosedWindowDays { get; set; } = 30;
+    // Re-query a little before the last watermark to cover ADO indexing lag / clock
+    // skew so a change committed near the previous query instant isn't missed.
+    public int WatermarkOverlapSeconds { get; set; } = 120;
 }
