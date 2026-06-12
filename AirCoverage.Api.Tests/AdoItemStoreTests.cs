@@ -21,7 +21,7 @@ public class AdoItemStoreTests
     }
 
     private static AdoWorkItem Wi(int id, string state, string tags) => new(
-        id, "T", "<div>d</div>", 2, state, "Alex Reyes", tags, $"https://x/{id}",
+        id, "T", "<div>d</div>", 2, state, "Alex Reyes", tags, $"https://x/{id}", "Bug",
         new DateTime(2026, 1, 1), new DateTime(2026, 1, 2));
 
     private static AdoItemStore NewStore(CacheDbContext cache, IAzureDevOpsClient client) =>
@@ -45,20 +45,21 @@ public class AdoItemStoreTests
     {
         var cache = NewCache();
         var client = Substitute.For<IAzureDevOpsClient>();
-        client.QueryMemberIdsAsync(Arg.Any<CancellationToken>()).Returns(new[] { 1, 2, 3, 4 });
+        client.QueryMemberIdsAsync(Arg.Any<CancellationToken>()).Returns(new[] { 1, 2, 3, 4, 5 });
 
         var now = DateTime.UtcNow;
-        AdoWorkItem WiAt(int id, string state, DateTime? changed) => new(
-            id, "T", "<div>d</div>", 2, state, "Alex Reyes", "AirCoverage", $"https://x/{id}",
+        AdoWorkItem WiAt(int id, string state, DateTime? changed, string workItemType = "Bug") => new(
+            id, "T", "<div>d</div>", 2, state, "Alex Reyes", "AirCoverage", $"https://x/{id}", workItemType,
             new DateTime(2026, 1, 1), changed);
 
         client.GetWorkItemsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
             .Returns(new[]
             {
-                WiAt(1, "Active",   now.AddDays(-1)),   // open -> excluded
-                WiAt(2, "Closed",   now.AddDays(-2)),   // closed, in window -> included
-                WiAt(3, "Resolved", now.AddDays(-90)),  // closed, out of window -> excluded
-                WiAt(4, "Closed",   null),              // null ChangedDate -> out of window -> excluded
+                WiAt(1, "Active",   now.AddDays(-1)),                    // open -> excluded
+                WiAt(2, "Closed",   now.AddDays(-2)),                    // closed, in window -> included
+                WiAt(3, "Resolved", now.AddDays(-90)),                  // closed, out of window -> excluded
+                WiAt(4, "Closed",   null),                              // null ChangedDate -> out of window -> excluded
+                WiAt(5, "Closed",   now.AddDays(-2), "Feature"),         // closed, in window BUT disallowed type -> excluded
             });
         var store = NewStore(cache, client);
 

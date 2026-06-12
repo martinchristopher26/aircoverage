@@ -69,9 +69,12 @@ public class AzureDevOpsClientTests : IDisposable
     {
         _server.Given(Request.Create().WithPath("/_apis/wit/workitems").UsingGet())
             .RespondWith(Response.Create().WithStatusCode(200).WithBody("""
-            {"value":[{"id":7,"url":"https://x/7","fields":{
+            {"value":[{"id":7,"url":"https://x/7",
+              "_links":{"html":{"href":"https://dev.azure.com/JustFOIA/JustFOIA%20Core/_workitems/edit/7"}},
+              "fields":{
               "System.Title":"T","System.Description":"<div>d</div>",
               "System.State":"Active","System.Tags":"AirCoverage; Waiting",
+              "System.WorkItemType":"Bug",
               "Microsoft.VSTS.Common.Priority":2,
               "System.AssignedTo":{"displayName":"Alex Reyes"},
               "System.CreatedDate":"2026-01-01T00:00:00Z","System.ChangedDate":"2026-01-02T00:00:00Z"}}]}
@@ -85,6 +88,9 @@ public class AzureDevOpsClientTests : IDisposable
         Assert.Equal(2, wi.Priority);
         Assert.Equal("Alex Reyes", wi.AssignedToDisplayName);
         Assert.Equal("AirCoverage; Waiting", wi.Tags);
+        Assert.Equal("Bug", wi.WorkItemType);
+        // Url must be the human web URL (_links.html.href), NOT the REST api url ("https://x/7").
+        Assert.Equal("https://dev.azure.com/JustFOIA/JustFOIA%20Core/_workitems/edit/7", wi.Url);
     }
 
     // New test 1: GetWorkItemAsync returns null on a 404 from ADO.

@@ -22,8 +22,9 @@ public class SyncServiceTests
     private static CacheSynchronizer NewSync(CacheDbContext cache, IAzureDevOpsClient client, AdoOptions? opt = null) =>
         new(cache, client, Options.Create(opt ?? new AdoOptions()), NullLogger<CacheSynchronizer>.Instance);
 
-    private static AdoWorkItem Wi(int id, string state) => new(
-        id, "T", "d", 2, state, null, "AirCoverage", $"https://x/{id}", new DateTime(2026, 1, 1), new DateTime(2026, 1, 2));
+    private static AdoWorkItem Wi(int id, string state, string workItemType = "Bug") => new(
+        id, "T", "d", 2, state, null, "AirCoverage", $"https://x/{id}", workItemType,
+        new DateTime(2026, 1, 1), new DateTime(2026, 1, 2));
 
     [Fact]
     public async Task SyncAsync_upserts_open_members_and_prunes_closed()
@@ -106,6 +107,38 @@ public class SyncServiceTests
         Assert.NotNull(await cache.Items.FindAsync(1)); // freshly written -> survives the prune
         Assert.Null(await cache.Items.FindAsync(2));     // written long ago -> genuinely stale, pruned
         Assert.NotNull(await cache.Items.FindAsync(3));  // open member -> present
+    }
+
+    [Fact]
+    public async Task SyncAsync_caches_only_included_types_and_prunes_disallowed()
+    {
+        // The queue is restricted to IncludedTypes (User Story, Bug). Members of other
+        // types (Epic, Feature, Task, …) are never cached; a previously-cached
+        // disallowed-type row is pruned on the next resync.
+        var cache = NewCache();
+        // A row cached earlier that is now a disallowed type (e.g. it was retyped to Feature).
+        cache.Items.Add(new CachedItem { Id = 4, Status = "New", CacheWrittenAt = DateTime.UtcNow.AddMinutes(-10) });
+        await cache.SaveChangesAsync();
+
+        var client = Substitute.For<IAzureDevOpsClient>();
+        client.QueryMemberIdsAsync(Arg.Any<CancellationToken>()).Returns(new[] { 1, 2, 3, 4 });
+        client.GetWorkItemsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                Wi(1, "Active", "User Story"), // included
+                Wi(2, "Active", "Bug"),        // included
+                Wi(3, "Active", "Epic"),       // excluded type -> not cached
+                Wi(4, "Active", "Feature"),    // excluded type -> not cached + prune the stale row
+            });
+
+        var sync = NewSync(cache, client);
+        await sync.SyncAsync(CancellationToken.None);
+
+        Assert.NotNull(await cache.Items.FindAsync(1)); // User Story cached
+        Assert.NotNull(await cache.Items.FindAsync(2)); // Bug cached
+        Assert.Null(await cache.Items.FindAsync(3));     // Epic not cached
+        Assert.Null(await cache.Items.FindAsync(4));     // Feature not cached AND previously-cached row pruned
+        Assert.Equal(2, await cache.Items.CountAsync());
     }
 
     [Fact]

@@ -7,7 +7,7 @@ public class ItemMapperTests
 {
     private static AdoWorkItem Wi(string state, string tags, int? priority = 2) => new(
         Id: 42, Title: "T", Description: "<div>d</div>", Priority: priority, State: state,
-        AssignedToDisplayName: "Alex Reyes", Tags: tags, Url: "https://x/42",
+        AssignedToDisplayName: "Alex Reyes", Tags: tags, Url: "https://x/42", WorkItemType: "Bug",
         CreatedDate: new DateTime(2026, 1, 1), ChangedDate: new DateTime(2026, 1, 2));
 
     [Fact]
