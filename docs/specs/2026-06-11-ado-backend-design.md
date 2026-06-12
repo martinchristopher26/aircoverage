@@ -305,3 +305,38 @@ cache. However, an item that is in the queue *only* via the epic-22691 hierarchy
 (i.e., it was never tagged `AirCoverage`) cannot be removed through the app — it
 would reappear on the next full resync. Such items must be managed directly in ADO
 (move out of the epic hierarchy, or close/resolve the item).
+
+### §4 — Work-item type filter (added)
+
+Membership is now additionally constrained by **work-item type**. After the union
+member set is fetched, only types listed in `Ado:IncludedTypes` (default
+`["User Story", "Bug"]`, matched case-insensitively) are admitted to the queue;
+Epics, Features, Tasks, and every other type are excluded even when they satisfy tag
+or hierarchy membership. The filter is applied in two places:
+
+- **Sync (open cache):** `CacheSynchronizer.SyncAsync` filters the fetched work to
+  the included types *before* upsert and prune. Disallowed types are never cached,
+  and a previously-cached row whose type is no longer included (e.g. an item retyped
+  in ADO) is pruned on the next resync. The empty-membership prune guard still keys
+  on the raw member-id count (`memberIds.Count == 0`), not the filtered set, so a
+  legitimately type-filtered-empty result does not skip the prune.
+- **Closed/resolved (on-demand):** `AdoItemStore.GetItemsAsync(Closed)` applies the
+  same type filter alongside the closed-state + `ClosedWindowDays` window filter.
+
+`AdoWorkItem` gained a `WorkItemType` field (sourced from `System.WorkItemType`).
+No cache-schema change is required: only allowed types are ever cached, so
+`CachedItem` needs no type column.
+
+### Item # opens the in-app detail modal (added)
+
+Clicking an Item # in the queue now opens the **in-app detail modal** rather than
+navigating to ADO in a new tab. The modal header shows a "View in Azure DevOps ↗"
+link (edit mode only, when a URL is present) that points to the work item's human
+web page.
+
+To support this, `AzureDevOpsClient.Flatten` now maps `AdoWorkItem.Url` from
+`_links.html.href` (the human web URL) with a fallback to `node.url` (the REST API
+URL, which returns raw JSON when opened in a browser). `System.WorkItemType` was
+added to the fetched `fields` list.
+
+Added config key: `Ado:IncludedTypes` (default `["User Story", "Bug"]`).

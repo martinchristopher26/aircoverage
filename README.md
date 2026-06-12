@@ -59,11 +59,18 @@ An Air Coverage item is any ADO work item that is a member of the **queue union*
 - **descendants (any depth)** of epic work item **22691** (configurable via
   `Ado:ParentWorkItemId`; set to `0` to disable the subtree source).
 
-Both sources are unioned — an item qualifies if it satisfies either condition. An
-Area Path filter (`Ado:AreaPath`) is currently defined in options but is **not
-applied** to the membership query. The default work item type is `Bug` (configurable
-via `Ado:WorkItemType`). The displayed Item # is the real ADO work-item ID and
-deep-links directly to the ADO board for that item.
+Both sources are unioned — an item qualifies if it satisfies either condition. The
+queue then shows only **`User Story`** and **`Bug`** work-item types; Epics,
+Features, Tasks, and any other type are excluded even if they satisfy membership
+(configurable via `Ado:IncludedTypes`). This type filter applies to both the cached
+open queue and the on-demand closed/resolved views. An Area Path filter
+(`Ado:AreaPath`) is currently defined in options but is **not applied** to the
+membership query. The default work item type used when creating items is `Bug`
+(configurable via `Ado:WorkItemType`).
+
+The displayed Item # is the real ADO work-item ID. Clicking it opens the **in-app
+detail modal** (instead of navigating away); the modal header carries a "View in
+Azure DevOps ↗" link to the work item's human web page.
 
 ### PAT scope required
 
@@ -155,6 +162,7 @@ A **"synced Xs ago"** indicator in the page header reflects the last successful 
 | `Ado:ParentWorkItemId` | `22691` | Epic whose descendants form the second membership source; set to `0` to disable |
 | `Ado:AreaPath` | (none) | Defined in options but currently unused by the membership query |
 | `Ado:WorkItemType` | `Bug` | Work item type used when creating items |
+| `Ado:IncludedTypes` | `["User Story", "Bug"]` | Work-item types admitted to the queue; all other types are excluded |
 | `Ado:PollSeconds` | `60` | Full membership resync interval |
 | `Ado:IndexingGraceSeconds` | `120` | Write-through rows younger than this are protected from prune during resync |
 | `Ado:ClosedWindowDays` | `30` | Look-back window for closed/resolved on-demand views |
