@@ -41,6 +41,33 @@ public class AdoItemStoreTests
     }
 
     [Fact]
+    public async Task GetItems_closed_returns_closed_members_within_window()
+    {
+        var cache = NewCache();
+        var client = Substitute.For<IAzureDevOpsClient>();
+        client.QueryMemberIdsAsync(Arg.Any<CancellationToken>()).Returns(new[] { 1, 2, 3, 4 });
+
+        var now = DateTime.UtcNow;
+        AdoWorkItem WiAt(int id, string state, DateTime? changed) => new(
+            id, "T", "<div>d</div>", 2, state, "Alex Reyes", "AirCoverage", $"https://x/{id}",
+            new DateTime(2026, 1, 1), changed);
+
+        client.GetWorkItemsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                WiAt(1, "Active",   now.AddDays(-1)),   // open -> excluded
+                WiAt(2, "Closed",   now.AddDays(-2)),   // closed, in window -> included
+                WiAt(3, "Resolved", now.AddDays(-90)),  // closed, out of window -> excluded
+                WiAt(4, "Closed",   null),              // null ChangedDate -> out of window -> excluded
+            });
+        var store = NewStore(cache, client);
+
+        var items = await store.GetItemsAsync(ItemScope.Closed, CancellationToken.None);
+
+        Assert.Equal(2, Assert.Single(items).Id);
+    }
+
+    [Fact]
     public async Task Create_writes_through_to_cache()
     {
         var cache = NewCache();

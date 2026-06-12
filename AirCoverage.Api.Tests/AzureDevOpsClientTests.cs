@@ -11,26 +11,47 @@ public class AzureDevOpsClientTests : IDisposable
 {
     private readonly WireMockServer _server = WireMockServer.Start();
 
-    private AzureDevOpsClient NewClient()
+    private AzureDevOpsClient NewClient(string project = "Proj", int parentWorkItemId = 0)
     {
         var options = Options.Create(new AdoOptions
         {
-            OrgUrl = _server.Urls[0], Project = "Proj", Tag = "AirCoverage", WorkItemType = "Bug",
+            OrgUrl = _server.Urls[0], Project = project, Tag = "AirCoverage", WorkItemType = "Bug",
+            ParentWorkItemId = parentWorkItemId,
         });
         var http = new HttpClient { BaseAddress = new Uri(_server.Urls[0]) };
         return new AzureDevOpsClient(http, options);
     }
 
     [Fact]
-    public async Task QueryOpenIdsAsync_posts_wiql_and_returns_ids()
+    public async Task QueryMemberIdsAsync_unions_tagged_and_descendants_excluding_epic_and_root()
     {
-        _server.Given(Request.Create().WithPath("/Proj/_apis/wit/wiql").UsingPost())
+        // The project name contains a space; the client URL-encodes it to "JustFOIA%20Core"
+        // on the wire. WireMock matches against the DECODED path, hence the space here.
+        const string wiqlPath = "/JustFOIA Core/_apis/wit/wiql";
+
+        // Tag query (flat WorkItems WIQL) → a single tagged id.
+        _server.Given(Request.Create().WithPath(wiqlPath).UsingPost()
+                .WithBody(b => b!.Contains("System.Tags")))
             .RespondWith(Response.Create().WithStatusCode(200)
-                .WithBody("""{"workItems":[{"id":7},{"id":9}]}"""));
+                .WithBody("""{"workItems":[{"id":7}]}"""));
 
-        var ids = await NewClient().QueryOpenIdsAsync(CancellationToken.None);
+        // Link query (recursive WorkItemLinks WIQL) → root self-entry (null rel) + 2 descendants.
+        _server.Given(Request.Create().WithPath(wiqlPath).UsingPost()
+                .WithBody(b => b!.Contains("WorkItemLinks")))
+            .RespondWith(Response.Create().WithStatusCode(200)
+                .WithBody("""
+                {"workItemRelations":[
+                  {"rel":null,"target":{"id":22691}},
+                  {"rel":"System.LinkTypes.Hierarchy-Forward","source":{"id":22691},"target":{"id":8}},
+                  {"rel":"System.LinkTypes.Hierarchy-Forward","source":{"id":8},"target":{"id":9}}
+                ]}
+                """));
 
-        Assert.Equal(new[] { 7, 9 }, ids);
+        var ids = await NewClient(project: "JustFOIA Core", parentWorkItemId: 22691)
+            .QueryMemberIdsAsync(CancellationToken.None);
+
+        // Union of {7} (tagged) and {8,9} (descendants); 22691 (epic + null-rel root) excluded.
+        Assert.Equal(new[] { 7, 8, 9 }, ids.OrderBy(i => i).ToArray());
     }
 
     [Fact]
