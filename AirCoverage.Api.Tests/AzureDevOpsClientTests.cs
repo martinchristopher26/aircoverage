@@ -22,6 +22,16 @@ public class AzureDevOpsClientTests : IDisposable
         return new AzureDevOpsClient(http, options);
     }
 
+    // Regression: a leading-slash request path against a BaseAddress with an org segment
+    // (e.g. https://dev.azure.com/JustFOIA) drops the org. BuildUrl must preserve it.
+    [Theory]
+    [InlineData("https://dev.azure.com/JustFOIA", "JustFOIA%20Core/_apis/wit/wiql", "https://dev.azure.com/JustFOIA/JustFOIA%20Core/_apis/wit/wiql")]
+    [InlineData("https://dev.azure.com/JustFOIA/", "_apis/wit/workitems", "https://dev.azure.com/JustFOIA/_apis/wit/workitems")]
+    public void BuildUrl_preserves_org_path_segment(string orgUrl, string path, string expected)
+    {
+        Assert.Equal(expected, AzureDevOpsClient.BuildUrl(orgUrl, path));
+    }
+
     [Fact]
     public async Task QueryMemberIdsAsync_unions_tagged_and_descendants_excluding_epic_and_root()
     {

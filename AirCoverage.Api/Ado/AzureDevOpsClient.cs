@@ -16,9 +16,16 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     {
         _http = http;
         _opt = options.Value;
-        if (_http.BaseAddress is null && !string.IsNullOrWhiteSpace(_opt.OrgUrl))
-            _http.BaseAddress = new Uri(_opt.OrgUrl);
     }
+
+    // Build an absolute ADO URL from the org base + a relative path. We deliberately do
+    // NOT rely on HttpClient.BaseAddress: a leading-slash request path is treated as an
+    // absolute path and would DISCARD the org segment of a base like
+    // "https://dev.azure.com/JustFOIA" (→ a 404). Joining explicitly preserves it.
+    public static string BuildUrl(string orgUrl, string path) =>
+        $"{orgUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+
+    private string Url(string path) => BuildUrl(_opt.OrgUrl, path);
 
     // Fix 1: escape single quotes so tag/area-path values containing apostrophes
     // can't produce malformed WIQL (e.g. "O'Brien" → "O''Brien").
@@ -55,7 +62,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     private async Task<IReadOnlyList<int>> WiqlIdsAsync(string query, CancellationToken ct)
     {
         var resp = await _http.PostAsJsonAsync(
-            $"/{ProjectPath}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
+            Url($"{ProjectPath}/_apis/wit/wiql?{ApiVersion}"), new { query }, ct);
         // Fix 4: surface ADO error bodies instead of bare EnsureSuccessStatusCode
         await EnsureAdoSuccessAsync(resp, ct);
         var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
@@ -69,7 +76,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     private async Task<IReadOnlyList<int>> WiqlLinkTargetIdsAsync(string query, int excludeId, CancellationToken ct)
     {
         var resp = await _http.PostAsJsonAsync(
-            $"/{ProjectPath}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
+            Url($"{ProjectPath}/_apis/wit/wiql?{ApiVersion}"), new { query }, ct);
         await EnsureAdoSuccessAsync(resp, ct);
         var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
         var arr = json?["workItemRelations"]?.AsArray();
@@ -90,7 +97,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
         {
             var fields = "System.Title,System.Description,System.State,System.Tags," +
                          "Microsoft.VSTS.Common.Priority,System.AssignedTo,System.CreatedDate,System.ChangedDate";
-            var url = $"/_apis/wit/workitems?ids={string.Join(',', batch)}&fields={fields}&{ApiVersion}";
+            var url = Url($"_apis/wit/workitems?ids={string.Join(',', batch)}&fields={fields}&{ApiVersion}");
             // Fix 4: switch from GetFromJsonAsync to GetAsync + EnsureAdoSuccessAsync so
             // error bodies are surfaced; then read JSON manually.
             var resp = await _http.GetAsync(url, ct);
@@ -107,7 +114,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
 
     public async Task<AdoWorkItem?> GetWorkItemAsync(int id, CancellationToken ct)
     {
-        var resp = await _http.GetAsync($"/_apis/wit/workitems/{id}?{ApiVersion}", ct);
+        var resp = await _http.GetAsync(Url($"_apis/wit/workitems/{id}?{ApiVersion}"), ct);
         if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         // Fix 4: surface ADO error bodies for non-404 failures
         await EnsureAdoSuccessAsync(resp, ct);
@@ -119,10 +126,10 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     }
 
     public Task<AdoWorkItem> CreateAsync(IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct) =>
-        PatchAsync(HttpMethod.Post, $"/{ProjectPath}/_apis/wit/workitems/${_opt.WorkItemType}?{ApiVersion}", ops, ct);
+        PatchAsync(HttpMethod.Post, Url($"{ProjectPath}/_apis/wit/workitems/${_opt.WorkItemType}?{ApiVersion}"), ops, ct);
 
     public Task<AdoWorkItem> UpdateAsync(int id, IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct) =>
-        PatchAsync(HttpMethod.Patch, $"/_apis/wit/workitems/{id}?{ApiVersion}", ops, ct);
+        PatchAsync(HttpMethod.Patch, Url($"_apis/wit/workitems/{id}?{ApiVersion}"), ops, ct);
 
     private async Task<AdoWorkItem> PatchAsync(HttpMethod method, string url, IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct)
     {
