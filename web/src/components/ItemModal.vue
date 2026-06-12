@@ -15,7 +15,17 @@ const draft = computed(() => items.editing!)
     <div class="modal">
       <div class="modal-head">
         <div style="flex: 1">
-          <div v-if="items.mode === 'edit'" class="mh-id">{{ draft.number }}</div>
+          <div v-if="items.mode === 'edit'" class="mh-id">
+            {{ draft.number }}
+            <a
+              v-if="draft.url"
+              class="ado-link"
+              :href="draft.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              >View in Azure DevOps ↗</a
+            >
+          </div>
           <div v-else class="mh-id">NEW ITEM</div>
           <h3 v-if="items.mode === 'edit'">{{ draft.title }}</h3>
           <h3 v-else>

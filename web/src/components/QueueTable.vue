@@ -27,10 +27,7 @@ const items = useItemsStore()
       <tbody>
         <tr v-for="it in items.visibleItems" :key="it.id" style="cursor: pointer" @click="items.openDetail(it)">
           <td><span class="prio" :class="it.priority"><span class="dot" />{{ it.priority }}</span></td>
-          <td>
-            <a v-if="it.url" class="id-link" :href="it.url" target="_blank" rel="noopener noreferrer" @click.stop>{{ it.number }}</a>
-            <span v-else class="id-link" @click.stop="items.openDetail(it)">{{ it.number }}</span>
-          </td>
+          <td><span class="id-link" @click.stop="items.openDetail(it)">{{ it.number }}</span></td>
           <td>
             <div class="row-title">
               {{ it.title }}
