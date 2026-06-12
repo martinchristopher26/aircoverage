@@ -16,4 +16,8 @@ public class AdoOptions
     // An item also belongs to the queue if it is a descendant (any depth) of this
     // epic work item; set to 0 to disable the subtree membership source.
     public int ParentWorkItemId { get; set; } = 22691;
+    // ADO WIQL is eventually consistent: a just-written item can be absent from the
+    // membership query for a few seconds. Cache rows written locally (write-through)
+    // within this window are protected from the full-resync prune.
+    public int IndexingGraceSeconds { get; set; } = 120;
 }

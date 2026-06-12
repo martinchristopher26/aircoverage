@@ -114,6 +114,7 @@ public class AdoItemStore : IItemStore
         row.Status = dto.Status; row.RequestedBy = dto.RequestedBy; row.Assignee = dto.Assignee;
         row.TicketType = dto.TicketType; row.TicketRef = dto.TicketRef; row.Tags = wi.Tags;
         row.Url = dto.Url; row.Received = dto.Received; row.Updated = dto.Updated;
+        row.CacheWrittenAt = DateTime.UtcNow; // local write marker: protects this row from the sync prune race
         await _cache.SaveChangesAsync(ct);
     }
 

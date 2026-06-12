@@ -2,6 +2,7 @@ using AirCoverage.Api.Ado;
 using AirCoverage.Api.Data;
 using AirCoverage.Api.Stores;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AirCoverage.Api.Sync;
@@ -12,10 +13,12 @@ public class CacheSynchronizer
     private readonly CacheDbContext _cache;
     private readonly IAzureDevOpsClient _ado;
     private readonly AdoOptions _opt;
+    private readonly ILogger<CacheSynchronizer> _log;
 
-    public CacheSynchronizer(CacheDbContext cache, IAzureDevOpsClient ado, IOptions<AdoOptions> options)
+    public CacheSynchronizer(CacheDbContext cache, IAzureDevOpsClient ado, IOptions<AdoOptions> options,
+        ILogger<CacheSynchronizer> log)
     {
-        _cache = cache; _ado = ado; _opt = options.Value;
+        _cache = cache; _ado = ado; _opt = options.Value; _log = log;
     }
 
     /// <summary>
@@ -25,6 +28,11 @@ public class CacheSynchronizer
     /// </summary>
     public async Task SyncAsync(CancellationToken ct)
     {
+        // Capture before querying ADO so the grace window covers any write-through that
+        // landed while the (eventually consistent) membership query was being evaluated.
+        var startedAt = DateTime.UtcNow;
+        var graceCutoff = startedAt - TimeSpan.FromSeconds(_opt.IndexingGraceSeconds);
+
         var memberIds = await _ado.QueryMemberIdsAsync(ct);
         var work = await _ado.GetWorkItemsAsync(memberIds, ct);
 
@@ -36,10 +44,25 @@ public class CacheSynchronizer
             .Select(w => w.Id)
             .ToHashSet();
 
-        var stale = await _cache.Items
-            .Where(i => !openMemberIds.Contains(i.Id))
-            .ToListAsync(ct);
-        _cache.Items.RemoveRange(stale);
+        // Guard against a transient/degraded ADO response (200 with an empty member set)
+        // wiping a populated cache. A legitimately-empty epic also yields an empty cache,
+        // so this only triggers on the suspicious populated-cache + empty-response case.
+        if (memberIds.Count == 0 && await _cache.Items.AnyAsync(ct))
+        {
+            _log.LogWarning("Membership query returned 0 items; skipping prune to avoid wiping a populated cache.");
+        }
+        else
+        {
+            // Prune rows that are no longer open members, EXCEPT rows written locally
+            // (write-through) within the grace window: ADO's WIQL index may not yet
+            // reflect a just-created/updated item. Genuinely stale rows (closed, de-tagged,
+            // left the subtree) written longer ago are still pruned.
+            var stale = await _cache.Items
+                .Where(i => !openMemberIds.Contains(i.Id)
+                         && (i.CacheWrittenAt == null || i.CacheWrittenAt < graceCutoff))
+                .ToListAsync(ct);
+            _cache.Items.RemoveRange(stale);
+        }
 
         var state = await GetStateAsync(ct);
         state.LastSuccessfulSync = DateTime.UtcNow;
@@ -60,6 +83,7 @@ public class CacheSynchronizer
         existing.Status = dto.Status; existing.RequestedBy = dto.RequestedBy; existing.Assignee = dto.Assignee;
         existing.TicketType = dto.TicketType; existing.TicketRef = dto.TicketRef; existing.Tags = wi.Tags;
         existing.Url = dto.Url; existing.Received = dto.Received; existing.Updated = dto.Updated;
+        existing.CacheWrittenAt = DateTime.UtcNow; // local write marker (same semantics as write-through)
     }
 
     private async Task<SyncState> GetStateAsync(CancellationToken ct)

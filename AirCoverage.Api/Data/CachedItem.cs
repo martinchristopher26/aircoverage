@@ -15,5 +15,10 @@ public class CachedItem
     public string Tags { get; set; } = "";   // raw System.Tags, for write read-modify-write
     public string Url { get; set; } = "";
     public DateTime Received { get; set; }
-    public DateTime? Updated { get; set; }
+    public DateTime? Updated { get; set; }   // ADO ChangedDate (server clock); NOT a local write marker
+
+    /// <summary>Local UTC timestamp of the last cache write (write-through or sync upsert).
+    /// Used to protect freshly-written rows from the full-resync prune while ADO's WIQL
+    /// index catches up (eventual consistency). NOT derived from ADO's ChangedDate.</summary>
+    public DateTime? CacheWrittenAt { get; set; }
 }
