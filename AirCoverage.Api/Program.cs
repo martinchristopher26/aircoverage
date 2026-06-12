@@ -6,6 +6,7 @@ using AirCoverage.Api.Security;
 using AirCoverage.Api.Stores;
 using AirCoverage.Api.Sync;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,6 +52,20 @@ builder.Services.AddHttpClient<IAzureDevOpsClient, AzureDevOpsClient>()
 builder.Services.AddScoped<IItemStore, AdoItemStore>();
 builder.Services.AddScoped<CacheSynchronizer>();
 builder.Services.AddHostedService<SyncService>();
+
+// --- Data Protection: the auth cookie is signed/encrypted with the DP key ring.
+//     By default the keys live INSIDE the container (/root/.aspnet/DataProtection-Keys),
+//     so every rebuild generates new keys and invalidates existing sessions (the
+//     classic "login broke after rebuild"). Persist them to the mounted /data volume
+//     instead. DataProtection__KeysDirectory is set to /data/dp-keys in the container;
+//     left unset locally → ephemeral dev keys, which is fine for `dotnet run`. ---
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("AirCoverage");
+var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"];
+if (!string.IsNullOrWhiteSpace(keysDirectory))
+{
+    Directory.CreateDirectory(keysDirectory);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+}
 
 // --- Auth v1: shared credential -> HttpOnly cookie. API returns 401 instead of
 //     redirecting to a login page so the SPA can react. ---

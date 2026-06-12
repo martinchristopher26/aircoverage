@@ -28,6 +28,9 @@ COPY --from=api /app ./
 # HTTPS on 8443 in code (Program.cs), so ASPNETCORE_URLS is intentionally unset.
 ENV ConnectionStrings__Default="Data Source=/data/aircoverage.db"
 ENV DevCert__Path="/data/aircoverage-dev.pfx"
+# Persist the Data Protection key ring on the volume so the auth cookie survives
+# rebuilds (otherwise every rebuild rotates keys and forces everyone to re-login).
+ENV DataProtection__KeysDirectory="/data/dp-keys"
 VOLUME /data
 EXPOSE 8443
 ENTRYPOINT ["dotnet", "AirCoverage.Api.dll"]
