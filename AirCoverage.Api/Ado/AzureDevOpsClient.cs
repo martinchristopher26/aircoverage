@@ -95,7 +95,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
         var result = new List<AdoWorkItem>(ids.Count);
         foreach (var batch in ids.Chunk(200))
         {
-            var fields = "System.Title,System.Description,System.State,System.Tags," +
+            var fields = "System.Title,System.Description,System.State,System.Tags,System.WorkItemType," +
                          "Microsoft.VSTS.Common.Priority,System.AssignedTo,System.CreatedDate,System.ChangedDate";
             var url = Url($"_apis/wit/workitems?ids={string.Join(',', batch)}&fields={fields}&{ApiVersion}");
             // Fix 4: switch from GetFromJsonAsync to GetAsync + EnsureAdoSuccessAsync so
@@ -174,7 +174,10 @@ public class AzureDevOpsClient : IAzureDevOpsClient
             State: S("System.State") ?? "New",
             AssignedToDisplayName: f["System.AssignedTo"]?["displayName"]?.ToString(),
             Tags: S("System.Tags") ?? "",
-            Url: node["url"]?.ToString() ?? "",
+            // Prefer the human web URL (_links.html.href) over node["url"], which is the
+            // REST API endpoint that returns raw JSON when opened in a browser.
+            Url: node["_links"]?["html"]?["href"]?.ToString() ?? node["url"]?.ToString() ?? "",
+            WorkItemType: S("System.WorkItemType") ?? "",
             CreatedDate: DateTime.Parse(S("System.CreatedDate") ?? DateTime.UtcNow.ToString("o")).ToUniversalTime(),
             ChangedDate: S("System.ChangedDate") is { } cd ? DateTime.Parse(cd).ToUniversalTime() : null);
     }

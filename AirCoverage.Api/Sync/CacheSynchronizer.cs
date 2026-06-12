@@ -36,10 +36,17 @@ public class CacheSynchronizer
         var memberIds = await _ado.QueryMemberIdsAsync(ct);
         var work = await _ado.GetWorkItemsAsync(memberIds, ct);
 
-        foreach (var wi in work) await ApplyAsync(wi, ct);
+        // Restrict the queue to the configured work-item types BEFORE upsert/prune, so
+        // disallowed types (Epic/Feature/Task/…) are never cached and any previously-cached
+        // disallowed row (e.g. an item retyped in ADO) is pruned on this resync.
+        var included = work
+            .Where(w => _opt.IncludedTypes.Contains(w.WorkItemType, StringComparer.OrdinalIgnoreCase))
+            .ToList();
 
-        // The authoritative set of rows the cache should retain: members that are still open.
-        var openMemberIds = work
+        foreach (var wi in included) await ApplyAsync(wi, ct);
+
+        // The authoritative set of rows the cache should retain: included members that are still open.
+        var openMemberIds = included
             .Where(w => !AdoItemStore.ClosedStatuses.Contains(w.State, StringComparer.OrdinalIgnoreCase))
             .Select(w => w.Id)
             .ToHashSet();

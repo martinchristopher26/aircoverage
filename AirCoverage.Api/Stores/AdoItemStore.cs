@@ -46,7 +46,8 @@ public class AdoItemStore : IItemStore
         var work = await _ado.GetWorkItemsAsync(ids, ct);
         var cutoff = DateTime.UtcNow.AddDays(-_opt.ClosedWindowDays);
         return work
-            .Where(w => ClosedStatuses.Contains(w.State, StringComparer.OrdinalIgnoreCase)
+            .Where(w => _opt.IncludedTypes.Contains(w.WorkItemType, StringComparer.OrdinalIgnoreCase)
+                     && ClosedStatuses.Contains(w.State, StringComparer.OrdinalIgnoreCase)
                      && w.ChangedDate is { } cd && cd >= cutoff)
             .OrderByDescending(w => w.ChangedDate)
             .Select(ItemMapper.ToDto)

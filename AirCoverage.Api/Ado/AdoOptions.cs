@@ -11,6 +11,9 @@ public class AdoOptions
     public string Tag { get; set; } = "AirCoverage";
     public string? AreaPath { get; set; }
     public string WorkItemType { get; set; } = "Bug";
+    // Only these work-item types are admitted to the queue (sync cache + closed scope).
+    // Any other type (Epic, Feature, Task, …) is excluded even if it satisfies membership.
+    public string[] IncludedTypes { get; set; } = new[] { "User Story", "Bug" };
     public int PollSeconds { get; set; } = 60;
     public int ClosedWindowDays { get; set; } = 30;
     // An item also belongs to the queue if it is a descendant (any depth) of this

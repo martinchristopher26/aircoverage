@@ -10,6 +10,7 @@ public record AdoWorkItem(
     string? AssignedToDisplayName,
     string Tags,
     string Url,
+    string WorkItemType,
     DateTime CreatedDate,
     DateTime? ChangedDate);
 
