@@ -26,3 +26,6 @@ AirCoverage.Api/wwwroot/
 # Local secrets — copy .env.example → .env and fill in real values
 # .env.example IS tracked; .env must NOT be
 .env
+
+# curl cookie jar from manual API testing
+cookies.txt
