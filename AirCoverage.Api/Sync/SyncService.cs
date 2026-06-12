@@ -17,39 +17,30 @@ public class SyncService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var lastReconcile = DateTime.MinValue;
-        // Initial full reconcile so the cache is warm at startup.
-        await RunReconcileAsync(stoppingToken);
-        lastReconcile = DateTime.UtcNow;
+        // Initial sync so the cache is warm at startup.
+        await RunSyncAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(_opt.PollSeconds), stoppingToken);
-                using var scope = _scopes.CreateScope();
-                var sync = scope.ServiceProvider.GetRequiredService<CacheSynchronizer>();
-                await sync.DeltaAsync(stoppingToken);
-
-                if ((DateTime.UtcNow - lastReconcile).TotalSeconds >= _opt.ReconcileSeconds)
-                {
-                    await RunReconcileAsync(stoppingToken);
-                    lastReconcile = DateTime.UtcNow;
-                }
+                await RunSyncAsync(stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _log.LogWarning(ex, "Cache sync iteration failed; will retry."); }
         }
     }
 
-    private async Task RunReconcileAsync(CancellationToken ct)
+    private async Task RunSyncAsync(CancellationToken ct)
     {
         try
         {
             using var scope = _scopes.CreateScope();
             var sync = scope.ServiceProvider.GetRequiredService<CacheSynchronizer>();
-            await sync.ReconcileAsync(ct);
+            await sync.SyncAsync(ct);
         }
-        catch (Exception ex) { _log.LogWarning(ex, "Cache reconcile failed; serving existing cache."); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { _log.LogWarning(ex, "Cache sync failed; serving existing cache."); }
     }
 }

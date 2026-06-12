@@ -18,50 +18,30 @@ public class CacheSynchronizer
         _cache = cache; _ado = ado; _opt = options.Value;
     }
 
-    public async Task DeltaAsync(CancellationToken ct)
+    /// <summary>
+    /// Full membership sync: fetches the current member set (tagged OR descendant of the
+    /// parent epic), upserts the open members into the cache, and prunes every cache row
+    /// that is no longer an open member (closed, de-tagged, or left the subtree).
+    /// </summary>
+    public async Task SyncAsync(CancellationToken ct)
     {
-        // Capture the query-start instant BEFORE querying so the next delta resumes
-        // from here regardless of how long this run takes.
-        var startedAt = DateTime.UtcNow;
-        var state = await GetStateAsync(ct);
+        var memberIds = await _ado.QueryMemberIdsAsync(ct);
+        var work = await _ado.GetWorkItemsAsync(memberIds, ct);
 
-        // Floor: resume from the last watermark, or seed an initial window on first run.
-        var floor = state.LastChangedWatermark ?? startedAt.AddDays(-_opt.ClosedWindowDays);
-        // Overlap the previous boundary to cover ADO indexing lag / clock skew.
-        var since = floor - TimeSpan.FromSeconds(_opt.WatermarkOverlapSeconds);
-
-        var ids = await _ado.QueryIdsChangedSinceAsync(since, ct);
-        var work = await _ado.GetWorkItemsAsync(ids, ct);
         foreach (var wi in work) await ApplyAsync(wi, ct);
 
-        // Advance to the query-start instant (monotonic); the overlap on the next
-        // query covers anything committed-but-not-yet-indexed at this point.
-        state.LastChangedWatermark = startedAt;
-        state.LastSuccessfulSync = DateTime.UtcNow;
-        await _cache.SaveChangesAsync(ct);
-    }
+        // The authoritative set of rows the cache should retain: members that are still open.
+        var openMemberIds = work
+            .Where(w => !AdoItemStore.ClosedStatuses.Contains(w.State, StringComparer.OrdinalIgnoreCase))
+            .Select(w => w.Id)
+            .ToHashSet();
 
-    public async Task ReconcileAsync(CancellationToken ct)
-    {
-        // Snapshot instant BEFORE the open-ids query so concurrent creates/updates
-        // landing after this point are not treated as orphans.
-        var startedAt = DateTime.UtcNow;
-
-        var openIds = (await _ado.QueryOpenIdsAsync(ct)).ToHashSet();
-        var work = await _ado.GetWorkItemsAsync(openIds.ToList(), ct);
-        foreach (var wi in work) await ApplyAsync(wi, ct);
-
-        // Drop only rows that are both absent from the open set AND untouched since the
-        // snapshot. A row written concurrently after startedAt must survive.
-        var orphans = await _cache.Items
-            .Where(i => !openIds.Contains(i.Id) && (i.Updated == null || i.Updated < startedAt))
+        var stale = await _cache.Items
+            .Where(i => !openMemberIds.Contains(i.Id))
             .ToListAsync(ct);
-        _cache.Items.RemoveRange(orphans);
+        _cache.Items.RemoveRange(stale);
 
         var state = await GetStateAsync(ct);
-        // Seed the watermark from the reconcile point so the first delta after startup
-        // continues from here instead of re-deriving a ClosedWindowDays window.
-        state.LastChangedWatermark = startedAt;
         state.LastSuccessfulSync = DateTime.UtcNow;
         await _cache.SaveChangesAsync(ct);
     }
