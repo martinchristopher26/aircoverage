@@ -245,3 +245,63 @@ updates if 60s ever feels stale.
 - **Entra ID** auth to ADO (drop the PAT) via the credential seam.
 - App user identity (v2 SSO) → default `AssignedTo` to the signed-in user; real
   identity-backed assignee picker.
+
+---
+
+## Amendment (2026-06-12): Union membership + full resync
+
+The following changes were implemented after the original spec was approved. This
+amendment supersedes the relevant parts of §4 (item identification), §6/§8
+(reads/freshness), and §7 (create/delete). All other sections remain in force.
+
+### §4 — Item identification (superseded)
+
+Queue membership is now the **union** of two sources:
+
+- work items carrying the **`AirCoverage` tag** (`Ado:Tag`), AND/OR
+- **descendants (any depth)** of epic work item **22691** (`Ado:ParentWorkItemId`;
+  set to `0` to disable). Descendant membership is resolved via a recursive
+  `WorkItemLinks` hierarchy WIQL query.
+
+`Ado:AreaPath` is currently defined in `AdoOptions` but is **not applied** to the
+membership query.
+
+### §6 / §8 — Reads & cache freshness (superseded)
+
+The delta-poll + periodic-reconcile model is replaced by a single mechanism:
+**full membership resync** every `Ado:PollSeconds` (default 60 s).
+
+Each resync cycle:
+1. Queries the complete union member IDs (tag ∪ epic descendants).
+2. Fetches and upserts all open members.
+3. Prunes cache rows whose IDs are no longer in the open member set.
+
+Two guards prevent the resync from corrupting the cache:
+
+- **Indexing-grace prune protection** (`Ado:IndexingGraceSeconds`, default 120 s) —
+  cache rows written locally (write-through) within this window are excluded from
+  pruning. This protects against ADO's eventual consistency: a just-written item may
+  be absent from WIQL results for a few seconds.
+- **Empty-response guard** — an empty membership result is treated as a transient
+  ADO failure and will not wipe a populated cache.
+
+Write-through (§8 point 1) is unchanged: every app write updates the cache
+synchronously for instant local feedback.
+
+Removed config keys: `Ado:ReconcileSeconds`, `Ado:WatermarkOverlapSeconds`.
+Added config key: `Ado:IndexingGraceSeconds` (default `120`).
+
+Hard-coded defaults added to `AdoOptions`: `Ado:OrgUrl` =
+`https://dev.azure.com/JustFOIA`, `Ado:Project` = `JustFOIA Core`. The PAT
+(`Ado:Pat`) remains a secret delivered via env var / user-secrets — never in
+`appsettings.json`.
+
+### §7 — Create / delete (partially superseded)
+
+**Create** is unchanged: new items are tagged `AirCoverage` (`Ado:Tag`) in ADO.
+
+**Delete caveat:** DELETE removes the `AirCoverage` tag, evicting the item from the
+cache. However, an item that is in the queue *only* via the epic-22691 hierarchy
+(i.e., it was never tagged `AirCoverage`) cannot be removed through the app — it
+would reappear on the next full resync. Such items must be managed directly in ADO
+(move out of the epic hierarchy, or close/resolve the item).

@@ -53,11 +53,17 @@ with no per-request ADO calls.
 
 ### What an item is
 
-An Air Coverage item is an **ADO work item carrying the `AirCoverage` tag**
-(configurable via `Ado:Tag`; an Area Path filter is also optional via `Ado:AreaPath`).
-The default work item type is `Bug` (configurable via `Ado:WorkItemType`). The
-displayed Item # is the real ADO work-item ID and deep-links directly to the ADO
-board for that item.
+An Air Coverage item is any ADO work item that is a member of the **queue union**:
+
+- work items carrying the **`AirCoverage` tag** (configurable via `Ado:Tag`), **OR**
+- **descendants (any depth)** of epic work item **22691** (configurable via
+  `Ado:ParentWorkItemId`; set to `0` to disable the subtree source).
+
+Both sources are unioned — an item qualifies if it satisfies either condition. An
+Area Path filter (`Ado:AreaPath`) is currently defined in options but is **not
+applied** to the membership query. The default work item type is `Bug` (configurable
+via `Ado:WorkItemType`). The displayed Item # is the real ADO work-item ID and
+deep-links directly to the ADO board for that item.
 
 ### PAT scope required
 
@@ -75,7 +81,14 @@ single-class change (see [Toward v2](#toward-v2-entra--sso)).
 cp .env.example .env
 ```
 
-Edit `.env` and fill in:
+The org URL and project are **hard-coded defaults** (`https://dev.azure.com/JustFOIA`
+and `JustFOIA Core`), so the **only value strictly required** in `.env` is the PAT:
+
+```
+ADO_PAT=your-pat-with-work-items-read-write
+```
+
+Override the org/project if pointing at a different ADO instance:
 
 ```
 ADO_ORG_URL=https://dev.azure.com/your-org
@@ -91,9 +104,14 @@ ADO_PAT=your-pat-with-work-items-read-write
 ```bash
 cd AirCoverage.Api
 dotnet user-secrets init
+dotnet user-secrets set "Ado:Pat" "your-pat"
+```
+
+The org URL and project default to the JustFOIA ADO instance; override if needed:
+
+```bash
 dotnet user-secrets set "Ado:OrgUrl" "https://dev.azure.com/your-org"
 dotnet user-secrets set "Ado:Project" "YourProject"
-dotnet user-secrets set "Ado:Pat" "your-pat"
 ```
 
 User-secrets are stored outside the repo and are never committed.
@@ -103,21 +121,26 @@ User-secrets are stored outside the repo and are never committed.
 **Closed and Resolved items fall off the active queue.** When an item is moved to
 Closed or Resolved (in the app or directly in ADO), it is pruned from the SQLite
 cache. The Closed, Resolved, and All tabs fetch a **bounded on-demand view** of
-items changed in the last 30 days (configurable via `Ado:ClosedWindowDays`) directly
-from ADO — only when those tabs are opened.
+union members filtered to closed states within the last 30 days (configurable via
+`Ado:ClosedWindowDays`) directly from ADO — only when those tabs are opened.
 
 ### Cache freshness
 
-Three lightweight mechanisms keep the cache current:
+Two mechanisms keep the cache current:
 
 1. **Write-through** — every create/update/status change the app makes is reflected
    in the cache instantly (the acting user always sees their own change immediately).
-2. **Delta poll** (default every 60 s, `Ado:PollSeconds`) — a WIQL query for items
-   changed since the last watermark fetches only what changed. Items now
-   Closed/Resolved are pruned.
-3. **Periodic full reconcile** (default every 5 min, `Ado:ReconcileSeconds`) — diffs
-   the full open-ID set from ADO against the cache and drops any orphans (items
-   hard-deleted or de-tagged in ADO that a delta might miss).
+2. **Full membership resync** (default every 60 s, `Ado:PollSeconds`) — queries the
+   complete union member IDs (tag ∪ epic descendants), fetches and upserts open
+   items, and prunes rows that are no longer open members.
+
+   Two guards prevent the resync from causing damage:
+   - **Indexing-grace prune protection** (`Ado:IndexingGraceSeconds`, default 120 s)
+     — cache rows written locally via write-through within this window are exempt
+     from pruning, protecting against ADO's eventual-consistency lag (a just-written
+     item may be briefly absent from WIQL results).
+   - **Empty-response guard** — an empty membership result from ADO will not wipe a
+     populated cache (treats it as a transient failure).
 
 A **"synced Xs ago"** indicator in the page header reflects the last successful sync.
 
@@ -125,14 +148,15 @@ A **"synced Xs ago"** indicator in the page header reflects the last successful 
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `Ado:OrgUrl` | — | `https://dev.azure.com/your-org` |
-| `Ado:Project` | — | ADO project name |
-| `Ado:Pat` | — | Personal Access Token (Work Items: Read & Write) |
-| `Ado:Tag` | `AirCoverage` | Tag that identifies queue items |
-| `Ado:AreaPath` | (none) | Optional area path filter (in addition to tag) |
+| `Ado:OrgUrl` | `https://dev.azure.com/JustFOIA` | ADO organisation URL |
+| `Ado:Project` | `JustFOIA Core` | ADO project name (URL-encoded in API paths) |
+| `Ado:Pat` | — | **Required.** Personal Access Token (Work Items: Read & Write) |
+| `Ado:Tag` | `AirCoverage` | Tag that identifies queue items (first membership source) |
+| `Ado:ParentWorkItemId` | `22691` | Epic whose descendants form the second membership source; set to `0` to disable |
+| `Ado:AreaPath` | (none) | Defined in options but currently unused by the membership query |
 | `Ado:WorkItemType` | `Bug` | Work item type used when creating items |
-| `Ado:PollSeconds` | `60` | Delta poll interval |
-| `Ado:ReconcileSeconds` | `300` | Full reconcile interval |
+| `Ado:PollSeconds` | `60` | Full membership resync interval |
+| `Ado:IndexingGraceSeconds` | `120` | Write-through rows younger than this are protected from prune during resync |
 | `Ado:ClosedWindowDays` | `30` | Look-back window for closed/resolved on-demand views |
 
 Env-var equivalents use double-underscore: e.g. `Ado__Pat`, `Ado__OrgUrl`.
@@ -158,8 +182,8 @@ dotnet run
 
 On first run it applies the EF migration (creates the SQLite cache at
 `AirCoverage.Api/aircoverage.db`) and generates `AirCoverage.Api/aircoverage-dev.pfx`.
-The `SyncService` background worker performs an initial full reconcile against ADO
-to warm the cache, then polls every 60 s.
+The `SyncService` background worker performs an initial full membership resync against
+ADO to warm the cache, then repeats every 60 s (`Ado:PollSeconds`).
 
 **Terminal 2 — SPA dev server (https://localhost:5173):**
 ```bash
@@ -223,7 +247,7 @@ All `/api/items*` routes require authentication (the cookie set by login).
 | GET    | `/api/items/{id}`     | One item (cache first, then ADO)                  |
 | POST   | `/api/items`          | Create (ADO assigns the work-item ID; write-through to cache) |
 | PUT    | `/api/items/{id}`     | Update (status changes, edits; stamps `Updated`; write-through) |
-| DELETE | `/api/items/{id}`     | Remove from queue by stripping the `AirCoverage` tag; evicts from cache |
+| DELETE | `/api/items/{id}`     | Remove from queue by stripping the `AirCoverage` tag; evicts from cache. **Caveat:** an item that is in the queue *only* via epic-22691 hierarchy (not tagged `AirCoverage`) cannot be removed this way — it would reappear on the next resync; manage those items directly in ADO. |
 | GET    | `/api/sync/status`    | `{ lastSync: ISO-timestamp }` — used by the staleness indicator |
 | POST   | `/api/auth/login`     | Shared creds → sets the HttpOnly auth cookie       |
 | POST   | `/api/auth/logout`    | Clears the cookie                                  |

@@ -1,5 +1,7 @@
 # Azure DevOps Backend Implementation Plan
 
+> **Superseded in part (2026-06-12):** the implemented backend differs from this plan in two areas. First, queue membership is now the **union of items tagged `AirCoverage` and descendants (any depth) of epic work item 22691** (`Ado:ParentWorkItemId`), not tag-only. Second, the delta-poll + periodic-reconcile sync model was replaced by a **full membership resync** every `Ado:PollSeconds` (default 60 s): query the union member IDs → fetch → upsert open → prune rows no longer in the open member set; write-through is retained for instant local feedback. Config keys `Ado:ReconcileSeconds` and `Ado:WatermarkOverlapSeconds` were removed; `Ado:IndexingGraceSeconds` (default 120 s, prune-protection window) was added. See the design-spec amendment in `docs/specs/2026-06-11-ado-backend-design.md` for the authoritative description.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace SQLite-as-system-of-record with Azure DevOps as the single source of truth, keeping SQLite only as a read-through cache of open items.
