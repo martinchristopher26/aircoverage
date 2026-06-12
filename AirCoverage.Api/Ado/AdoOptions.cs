@@ -4,17 +4,16 @@ public class AdoOptions
 {
     public const string Section = "Ado";
 
-    public string OrgUrl { get; set; } = "";          // https://dev.azure.com/yourorg
-    public string Project { get; set; } = "";
+    public string OrgUrl { get; set; } = "https://dev.azure.com/JustFOIA";
+    public string Project { get; set; } = "JustFOIA Core";
     // Provide via secret (env Ado__Pat / Docker secret / user-secrets) — never appsettings.json.
     public string Pat { get; set; } = "";
     public string Tag { get; set; } = "AirCoverage";
     public string? AreaPath { get; set; }
     public string WorkItemType { get; set; } = "Bug";
     public int PollSeconds { get; set; } = 60;
-    public int ReconcileSeconds { get; set; } = 300;
     public int ClosedWindowDays { get; set; } = 30;
-    // Re-query a little before the last watermark to cover ADO indexing lag / clock
-    // skew so a change committed near the previous query instant isn't missed.
-    public int WatermarkOverlapSeconds { get; set; } = 120;
+    // An item also belongs to the queue if it is a descendant (any depth) of this
+    // epic work item; set to 0 to disable the subtree membership source.
+    public int ParentWorkItemId { get; set; } = 22691;
 }

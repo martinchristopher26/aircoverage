@@ -24,35 +24,62 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     // can't produce malformed WIQL (e.g. "O'Brien" → "O''Brien").
     private static string WiqlEscape(string s) => s.Replace("'", "''");
 
-    private string TagFilter =>
-        $"[System.Tags] CONTAINS '{WiqlEscape(_opt.Tag)}'" +
-        (string.IsNullOrWhiteSpace(_opt.AreaPath) ? "" : $" AND [System.AreaPath] UNDER '{WiqlEscape(_opt.AreaPath)}'");
+    // The project name can contain spaces (e.g. "JustFOIA Core"); escape it for the URL path.
+    private string ProjectPath => Uri.EscapeDataString(_opt.Project);
 
-    public Task<IReadOnlyList<int>> QueryOpenIdsAsync(CancellationToken ct) =>
-        WiqlIdsAsync($"SELECT [System.Id] FROM WorkItems WHERE {TagFilter} " +
-                     "AND [System.State] NOT IN ('Closed','Resolved') " +
-                     "ORDER BY [Microsoft.VSTS.Common.Priority] ASC, [System.CreatedDate] ASC", ct);
+    /// <summary>
+    /// Returns the deduped union of the queue's two membership sources:
+    /// work items carrying the configured tag, and (if configured) every descendant
+    /// of the parent epic at any depth. The parent epic itself is excluded.
+    /// </summary>
+    public async Task<IReadOnlyList<int>> QueryMemberIdsAsync(CancellationToken ct)
+    {
+        var ids = new HashSet<int>();
 
-    public Task<IReadOnlyList<int>> QueryIdsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct) =>
-        WiqlIdsAsync($"SELECT [System.Id] FROM WorkItems WHERE {TagFilter} " +
-                     $"AND [System.ChangedDate] >= '{sinceUtc:yyyy-MM-ddTHH:mm:ssZ}'", ct);
+        var tagged = await WiqlIdsAsync(
+            $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{WiqlEscape(_opt.Tag)}'", ct);
+        foreach (var id in tagged) ids.Add(id);
 
-    public Task<IReadOnlyList<int>> QueryClosedIdsAsync(int windowDays, CancellationToken ct) =>
-        WiqlIdsAsync($"SELECT [System.Id] FROM WorkItems WHERE {TagFilter} " +
-                     "AND [System.State] IN ('Closed','Resolved') " +
-                     $"AND [System.ChangedDate] >= @today - {windowDays} " +
-                     "ORDER BY [System.ChangedDate] DESC", ct);
+        if (_opt.ParentWorkItemId > 0)
+        {
+            var descendants = await WiqlLinkTargetIdsAsync(
+                $"SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] = {_opt.ParentWorkItemId} " +
+                "AND [System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward' MODE (Recursive)",
+                excludeId: _opt.ParentWorkItemId, ct);
+            foreach (var id in descendants) ids.Add(id);
+        }
+
+        return ids.ToList();
+    }
 
     private async Task<IReadOnlyList<int>> WiqlIdsAsync(string query, CancellationToken ct)
     {
         var resp = await _http.PostAsJsonAsync(
-            $"/{_opt.Project}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
+            $"/{ProjectPath}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
         // Fix 4: surface ADO error bodies instead of bare EnsureSuccessStatusCode
         await EnsureAdoSuccessAsync(resp, ct);
         var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
         var arr = json?["workItems"]?.AsArray();
         return arr is null ? Array.Empty<int>()
             : arr.Select(n => (int)n!["id"]!).ToList();
+    }
+
+    // Parses a recursive WorkItemLinks WIQL response: target ids from workItemRelations[],
+    // excluding the null-rel root self-entry and the supplied excludeId (the epic itself).
+    private async Task<IReadOnlyList<int>> WiqlLinkTargetIdsAsync(string query, int excludeId, CancellationToken ct)
+    {
+        var resp = await _http.PostAsJsonAsync(
+            $"/{ProjectPath}/_apis/wit/wiql?{ApiVersion}", new { query }, ct);
+        await EnsureAdoSuccessAsync(resp, ct);
+        var json = await resp.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+        var arr = json?["workItemRelations"]?.AsArray();
+        if (arr is null) return Array.Empty<int>();
+        return arr
+            .Where(n => n!["rel"] is not null)                  // skip the root self-entry
+            .Select(n => (int)n!["target"]!["id"]!)
+            .Where(id => id != excludeId)                       // skip the epic itself
+            .Distinct()
+            .ToList();
     }
 
     public async Task<IReadOnlyList<AdoWorkItem>> GetWorkItemsAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
@@ -92,7 +119,7 @@ public class AzureDevOpsClient : IAzureDevOpsClient
     }
 
     public Task<AdoWorkItem> CreateAsync(IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct) =>
-        PatchAsync(HttpMethod.Post, $"/{_opt.Project}/_apis/wit/workitems/${_opt.WorkItemType}?{ApiVersion}", ops, ct);
+        PatchAsync(HttpMethod.Post, $"/{ProjectPath}/_apis/wit/workitems/${_opt.WorkItemType}?{ApiVersion}", ops, ct);
 
     public Task<AdoWorkItem> UpdateAsync(int id, IReadOnlyList<JsonPatchOperation> ops, CancellationToken ct) =>
         PatchAsync(HttpMethod.Patch, $"/_apis/wit/workitems/{id}?{ApiVersion}", ops, ct);
