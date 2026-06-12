@@ -41,10 +41,16 @@ public class AdoItemStore : IItemStore
                 .ToList();
         }
 
-        // Closed/Resolved are not cached: bounded on-demand query.
-        var ids = await _ado.QueryClosedIdsAsync(_opt.ClosedWindowDays, ct);
+        // Closed/Resolved are not cached: bounded on-demand query over the union members.
+        var ids = await _ado.QueryMemberIdsAsync(ct);
         var work = await _ado.GetWorkItemsAsync(ids, ct);
-        return work.Select(ItemMapper.ToDto).ToList();
+        var cutoff = DateTime.UtcNow.AddDays(-_opt.ClosedWindowDays);
+        return work
+            .Where(w => ClosedStatuses.Contains(w.State, StringComparer.OrdinalIgnoreCase)
+                     && w.ChangedDate is { } cd && cd >= cutoff)
+            .OrderByDescending(w => w.ChangedDate)
+            .Select(ItemMapper.ToDto)
+            .ToList();
     }
 
     public async Task<ItemDto?> GetItemAsync(int id, CancellationToken ct)
