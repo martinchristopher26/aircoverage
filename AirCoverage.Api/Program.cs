@@ -1,3 +1,4 @@
+using AirCoverage.Api;
 using AirCoverage.Api.Abstractions;
 using AirCoverage.Api.Ado;
 using AirCoverage.Api.Data;
@@ -7,16 +8,27 @@ using AirCoverage.Api.Stores;
 using AirCoverage.Api.Sync;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- HTTPS: listen on a single TLS port (default 8443). The cert is either a
-//     real one supplied via Kestrel config (Kestrel:Certificates:Default:*) or,
-//     by default, an auto-generated self-signed cert for localhost persisted to
-//     DevCert:Path (the mounted /data volume in Docker). ---
+// --- Transport. A TLS-terminating platform (Railway, Heroku, etc.) sets the PORT
+//     env var and forwards plain HTTP to the container, handling HTTPS at its edge.
+//     In that mode we bind HTTP on $PORT and trust the X-Forwarded-* headers. Locally
+//     (no PORT) we serve HTTPS on 8443 with a self-signed dev cert (BYO cert via
+//     Kestrel:Certificates:Default, else auto-generated and persisted to DevCert:Path). ---
+var platformPort = HostingMode.ResolvePlatformPort(builder.Configuration["PORT"]);
+var behindProxy = platformPort is not null;
+
 builder.WebHost.ConfigureKestrel((context, options) =>
 {
+    if (behindProxy)
+    {
+        options.ListenAnyIP(platformPort!.Value); // HTTP; the platform terminates TLS
+        return;
+    }
+
     var config = context.Configuration;
     var httpsPort = config.GetValue("Https:Port", 8443);
     var byoCertPath = config["Kestrel:Certificates:Default:Path"];
@@ -35,6 +47,18 @@ builder.WebHost.ConfigureKestrel((context, options) =>
         }
     });
 });
+
+// Behind a proxy, honor X-Forwarded-Proto/For so the app sees the original HTTPS
+// scheme (keeps the Secure auth cookie correct) and the real client IP.
+if (behindProxy)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        o.KnownNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
+}
 
 // --- Persistence: SQLite via EF Core (one file; override the path in containers
 //     with ConnectionStrings__Default=Data Source=/data/aircoverage.db). ---
@@ -102,6 +126,13 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
+// Behind a proxy, apply forwarded headers first so all downstream middleware sees
+// the real scheme (https) and client IP.
+if (behindProxy)
+{
+    app.UseForwardedHeaders();
+}
+
 // Serve the built Vue SPA (wwwroot) as static files; these are public so the
 // login screen can load. API routes are gated below.
 app.UseDefaultFiles();
@@ -109,6 +140,9 @@ app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Liveness probe for the hosting platform (anonymous).
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapAuthApi();
 app.MapItemsApi();

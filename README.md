@@ -266,8 +266,16 @@ The shared credential is configurable via `Auth:Username` / `Auth:Password`
 
 ## TLS / certificates
 
-The app listens on **HTTPS only, port 8443** (bound in `Program.cs` via
-`ConfigureKestrel`; configurable with `Https:Port`).
+The app has two transport modes, chosen automatically at startup:
+
+- **Local / self-hosted (no `PORT` env):** serves **HTTPS on port 8443** with the
+  self-signed dev cert (details below). This is what `docker compose` uses.
+- **Behind a TLS-terminating platform (`PORT` env set — Railway, Heroku, etc.):**
+  serves **plain HTTP on `$PORT`** and trusts `X-Forwarded-Proto/For` (the platform
+  handles HTTPS at its edge). The self-signed cert is not used. See
+  [Deploy to Railway](#deploy-to-railway-container).
+
+In HTTPS mode (no `PORT`):
 
 - **Default (dev/internal):** on first start, `Security/DevCertificate.cs` generates
   a self-signed cert for `localhost` (SANs: `localhost`, `127.0.0.1`, `::1`) and
@@ -289,6 +297,35 @@ The app listens on **HTTPS only, port 8443** (bound in `Program.cs` via
 
 Change the port by setting `Https__Port` (env) and updating the published port in
 `docker-compose.yml`.
+
+## Deploy to Railway (container)
+
+Railway builds the multi-stage `Dockerfile` and runs the single container (API + SPA).
+It terminates TLS at its edge and forwards HTTP to the container on `$PORT`, which the
+app detects automatically (serves HTTP on `$PORT` + honors forwarded headers — no
+self-signed cert involved). A `GET /health` endpoint is provided for health checks.
+
+**Steps:**
+1. **Get the code on GitHub** (already pushed to the repo, branch `feat/ado-backend`).
+2. Railway → **New Project → Deploy from GitHub repo** → select the repo (it detects
+   the `Dockerfile`). Or, without GitHub: `npm i -g @railway/cli && railway login &&
+   railway init && railway up`.
+3. **Add a Volume mounted at `/data`** (Railway → service → Variables/Volumes). This
+   persists the Data Protection keys (so logins survive redeploys) and the SQLite cache.
+4. **Set Variables** (Railway → service → Variables):
+   | Variable | Value | Notes |
+   |---|---|---|
+   | `Ado__Pat` | *your PAT* | **required**, secret (Work Items: Read & Write) |
+   | `Auth__Username` / `Auth__Password` | *strong values* | **change these** — the URL is public; defaults are `devteam`/`aircoverage` |
+   | `Ado__OrgUrl` / `Ado__Project` / `Ado__ParentWorkItemId` | optional | already hard-coded defaults |
+
+   `ConnectionStrings__Default`, `DevCert__Path`, and `DataProtection__KeysDirectory`
+   are baked into the Dockerfile (all under `/data`) — no need to set them.
+5. Deploy. Railway gives an HTTPS `*.up.railway.app` URL; open it and sign in.
+
+> **Security:** a Railway URL is internet-public, gated only by the shared `Auth`
+> credential — set strong `Auth__Username`/`Auth__Password` (the v2 Entra SSO path is
+> the real long-term answer). The healthcheck path is `/health`.
 
 ## Toward v2 (Entra + SSO)
 
