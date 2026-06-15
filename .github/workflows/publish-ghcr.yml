@@ -49,6 +49,12 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          # Push a single plain image manifest. Without these, buildx attaches a
+          # provenance/SBOM attestation, producing an OCI image INDEX with an
+          # "unknown/unknown" attestation entry that Railway (and some other
+          # platforms/registries) reject as an "invalid docker image".
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
