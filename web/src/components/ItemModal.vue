@@ -89,7 +89,7 @@ const draft = computed(() => items.editing!)
           </div>
           <div class="mfield full">
             <label>Description / details</label>
-            <textarea v-model="draft.description" placeholder="What's going on, repro steps, impact, who's affected…" />
+            <textarea v-model="draft.description" class="desc-area" rows="8" placeholder="What's going on, repro steps, impact, who's affected…" />
           </div>
         </div>
 

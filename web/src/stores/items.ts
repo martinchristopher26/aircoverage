@@ -6,6 +6,8 @@ import type { Item, ItemDraft, Status, TicketType } from '../types'
 type SortKey = 'priority' | 'received'
 
 const CLOSED_SCOPE_TABS = ['Resolved', 'Closed', 'all']
+/** Sentinel filter value matching items with no assignee. */
+export const UNASSIGNED_FILTER = '__unassigned__'
 function dedupeById(list: Item[]): Item[] {
   const seen = new Set<number>()
   return list.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)))
@@ -52,6 +54,7 @@ export const useItemsStore = defineStore('items', {
 
     // view state
     search: '',
+    assigneeFilter: '',
     activeTab: 'open',
     sortKey: 'priority' as SortKey,
     sortDir: 1 as 1 | -1, // 1 = critical-first / oldest-first
@@ -87,8 +90,27 @@ export const useItemsStore = defineStore('items', {
       )
     },
 
+    /** Distinct assignee names present in the current tab (excludes unassigned). */
+    assigneeOptions(): string[] {
+      const set = new Set<string>()
+      for (const it of this.filteredByTab) if (it.assignee) set.add(it.assignee)
+      return [...set].sort((a, b) => a.localeCompare(b))
+    },
+
+    /** Whether the current tab contains any unassigned items. */
+    hasUnassigned(): boolean {
+      return this.filteredByTab.some((it) => !it.assignee)
+    },
+
+    filteredByAssignee(): Item[] {
+      const f = this.assigneeFilter
+      if (!f) return this.filteredBySearch
+      if (f === UNASSIGNED_FILTER) return this.filteredBySearch.filter((it) => !it.assignee)
+      return this.filteredBySearch.filter((it) => it.assignee === f)
+    },
+
     visibleItems(): Item[] {
-      const arr = this.filteredBySearch.slice()
+      const arr = this.filteredByAssignee.slice()
       const dir = this.sortDir
       const key = this.sortKey
       arr.sort((a, b) => {

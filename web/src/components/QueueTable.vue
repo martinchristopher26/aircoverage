@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useItemsStore } from '../stores/items'
+import { UNASSIGNED_FILTER } from '../stores/items'
 import { daysOpen, initials, isClosed, statusClass } from '../lib/format'
 
 const items = useItemsStore()
@@ -16,7 +17,21 @@ const items = useItemsStore()
           <th style="width: 120px">Item #</th>
           <th>Title / Summary</th>
           <th style="width: 150px">Status</th>
-          <th style="width: 170px">Assigned</th>
+          <th style="width: 190px">
+            <div class="col-filter">
+              <span>Assigned</span>
+              <select
+                v-model="items.assigneeFilter"
+                class="col-filter-select"
+                title="Filter by assignee"
+                @click.stop
+              >
+                <option value="">All</option>
+                <option v-for="a in items.assigneeOptions" :key="a" :value="a">{{ a }}</option>
+                <option v-if="items.hasUnassigned" :value="UNASSIGNED_FILTER">Unassigned</option>
+              </select>
+            </div>
+          </th>
           <th style="width: 140px">Source</th>
           <th style="width: 120px">Ticket</th>
           <th class="sortable" style="width: 120px" @click="items.setSort('received')">
